@@ -308,7 +308,8 @@ public class FloatingWidget : Form
 
     private void PaintEdgeStripVertical(Graphics g, bool isDark, Color segBg, int w, int h)
     {
-        int barX = _snapEdge == DockStyle.Right ? EdgeMargin : 0;
+        // 留白在屏幕边一侧，进度条面向桌面
+        int barX = _snapEdge == DockStyle.Right ? 0 : EdgeMargin;
         int barW = EdgeRevealWidth;
         int barY = EdgeSegPadding;
         int barH = h - EdgeSegPadding * 2;
@@ -322,9 +323,10 @@ public class FloatingWidget : Form
 
     private void PaintEdgeStripHorizontal(Graphics g, bool isDark, Color segBg, int w, int h)
     {
+        // 留白在屏幕边一侧（上），进度条面向桌面（下）
         int barX = EdgeSegPadding;
         int barW = w - EdgeSegPadding * 2;
-        int barY = EdgeMargin;
+        int barY = EdgeMargin; // 跳过顶部留白
         int barH = EdgeRevealWidth;
         int segW = (barW - EdgeSegGap) / 2;
 
@@ -424,19 +426,22 @@ public class FloatingWidget : Form
         _snapEdge = edge;
         _isExpanded = false;
 
+        int currentX = Location.X;
+        int currentY = Location.Y;
+
         switch (edge)
         {
             case DockStyle.Right:
                 Size = new Size(EdgeMargin + EdgeRevealWidth, EdgeStripVHeight);
-                Location = new Point(screen.Right - Width, screen.Top + screen.Height / 2 - Height / 2);
+                Location = new Point(screen.Right - Width, Math.Clamp(currentY, screen.Top, screen.Bottom - Height));
                 break;
             case DockStyle.Left:
                 Size = new Size(EdgeMargin + EdgeRevealWidth, EdgeStripVHeight);
-                Location = new Point(screen.Left, screen.Top + screen.Height / 2 - Height / 2);
+                Location = new Point(screen.Left, Math.Clamp(currentY, screen.Top, screen.Bottom - Height));
                 break;
             case DockStyle.Top:
                 Size = new Size(EdgeStripHWidth, EdgeMargin + EdgeRevealWidth);
-                Location = new Point(screen.Left + screen.Width / 2 - Width / 2, screen.Top);
+                Location = new Point(Math.Clamp(currentX, screen.Left, screen.Right - Width), screen.Top);
                 break;
         }
 
@@ -471,19 +476,22 @@ public class FloatingWidget : Form
         _isExpanded = false;
 
         var screen = Screen.PrimaryScreen!.WorkingArea;
+        int currentX = Location.X;
+        int currentY = Location.Y;
+
         switch (_snapEdge)
         {
             case DockStyle.Right:
                 Size = new Size(EdgeMargin + EdgeRevealWidth, EdgeStripVHeight);
-                Location = new Point(screen.Right - Width, screen.Top + screen.Height / 2 - Height / 2);
+                Location = new Point(screen.Right - Width, Math.Clamp(currentY, screen.Top, screen.Bottom - Height));
                 break;
             case DockStyle.Left:
                 Size = new Size(EdgeMargin + EdgeRevealWidth, EdgeStripVHeight);
-                Location = new Point(screen.Left, screen.Top + screen.Height / 2 - Height / 2);
+                Location = new Point(screen.Left, Math.Clamp(currentY, screen.Top, screen.Bottom - Height));
                 break;
             case DockStyle.Top:
                 Size = new Size(EdgeStripHWidth, EdgeMargin + EdgeRevealWidth);
-                Location = new Point(screen.Left + screen.Width / 2 - Width / 2, screen.Top);
+                Location = new Point(Math.Clamp(currentX, screen.Left, screen.Right - Width), screen.Top);
                 break;
         }
 

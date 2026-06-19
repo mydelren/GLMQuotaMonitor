@@ -109,7 +109,7 @@ public class QuotaService : IDisposable
     public QuotaSnapshot GetLastSnapshot() => _lastSnapshot;
 
     /// <summary>
-    /// 执行一次配额查询
+    /// 执行一次配额查询（并行请求 quota/limit 和 model-usage）
     /// </summary>
     private async Task FetchQuota(string token, string baseUrl, CancellationToken ct)
     {
@@ -130,17 +130,15 @@ public class QuotaService : IDisposable
         try
         {
             string domain = NormalizeBaseUrl(baseUrl);
-            string url = $"{domain}/api/monitor/usage/quota/limit";
 
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.Add("Authorization", token);
-            request.Headers.Add("Accept-Language", "en-US,en");
+            // 并行请求两个接口
+            var quotaTask = FetchJson(domain, "/api/monitor/usage/quota/limit", token, ct);
+            var usageTask = FetchModelUsage(domain, token, ct);
 
-            using var response = await _http.SendAsync(request, ct);
-            response.EnsureSuccessStatusCode();
+            await Task.WhenAll(quotaTask, usageTask);
 
-            string json = await response.Content.ReadAsStringAsync(ct);
-            var snapshot = ParseQuotaResponse(json);
+            var snapshot = ParseQuotaResponse(quotaTask.Result);
+            ParseModelUsage(usageTask.Result, snapshot);
             snapshot.Timestamp = DateTime.Now;
             snapshot.IsOffline = false;
 
@@ -151,13 +149,12 @@ public class QuotaService : IDisposable
         }
         catch (OperationCanceledException)
         {
-            throw; // 让调用方处理取消
+            throw;
         }
         catch (Exception ex)
         {
             _consecutiveFailures++;
 
-            // 创建新的离线快照，保留上次数据
             var offline = new QuotaSnapshot
             {
                 IsOffline = true,
@@ -178,7 +175,34 @@ public class QuotaService : IDisposable
     }
 
     /// <summary>
-    /// 解析配额 API 响应
+    /// 通用 GET JSON 请求
+    /// </summary>
+    private async Task<string> FetchJson(string domain, string path, string token, CancellationToken ct)
+    {
+        string url = $"{domain}{path}";
+        using var request = new HttpRequestMessage(HttpMethod.Get, url);
+        request.Headers.Add("Authorization", token);
+        request.Headers.Add("Accept-Language", "en-US,en");
+
+        using var response = await _http.SendAsync(request, ct);
+        response.EnsureSuccessStatusCode();
+        return await response.Content.ReadAsStringAsync(ct);
+    }
+
+    /// <summary>
+    /// 请求 model-usage 接口（24 小时滑动窗口）
+    /// </summary>
+    private async Task<string> FetchModelUsage(string domain, string token, CancellationToken ct)
+    {
+        var now = DateTime.Now;
+        string start = now.AddHours(-24).ToString("yyyy-MM-dd HH:mm:ss");
+        string end = now.ToString("yyyy-MM-dd HH:mm:ss");
+        string path = $"/api/monitor/usage/model-usage?startTime={Uri.EscapeDataString(start)}&endTime={Uri.EscapeDataString(end)}";
+        return await FetchJson(domain, path, token, ct);
+    }
+
+    /// <summary>
+    /// 解析 quota/limit 响应
     /// </summary>
     private static QuotaSnapshot ParseQuotaResponse(string json)
     {
@@ -226,6 +250,32 @@ public class QuotaService : IDisposable
         }
 
         return snapshot;
+    }
+
+    /// <summary>
+    /// 解析 model-usage 响应，填充调用次数和 Token 用量
+    /// </summary>
+    private static void ParseModelUsage(string json, QuotaSnapshot snapshot)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            if (!root.TryGetProperty("data", out var data))
+                return;
+
+            // totalUsage 包含总计数据
+            if (data.TryGetProperty("totalUsage", out var totalUsage))
+            {
+                snapshot.CallCount = GetLongAny(totalUsage, "totalModelCallCount", "modelCallCount");
+                snapshot.TokenUsage = GetLongAny(totalUsage, "totalTokensUsage", "tokensUsage");
+            }
+        }
+        catch
+        {
+            // 解析失败不影响主流程
+        }
     }
 
     private static long GetLongAny(JsonElement element, params string[] names)

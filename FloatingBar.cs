@@ -10,8 +10,8 @@ namespace GLMQuotaMonitor;
 /// </summary>
 public class FloatingBar : Form
 {
-    private const int BarHeight = 34;
-    private const int DefaultBarWidth = 360;
+    private const int BarHeight = 38;
+    private const int DefaultBarWidth = 400;
     private const int EdgeSnapThreshold = 10;
     private const int AutoHideDelayMs = 500;
     private const int RevealEdgeWidth = 4;
@@ -138,15 +138,15 @@ public class FloatingBar : Form
         using (var dotBrush = new SolidBrush(dotColor))
             g.FillEllipse(dotBrush, dotX, dotY, dotSize, dotSize);
 
-        // 文字（圆点右侧，整体居中）
+        // 文字（圆点右侧，水平和垂直居中）
         string text = FormatBarText();
         Color textColor = isDark ? Color.FromArgb(224, 224, 224) : Color.FromArgb(30, 30, 30);
-        using var font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
+        using var font = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
         using var textBrush = new SolidBrush(textColor);
 
         var textSize = g.MeasureString(text, font);
-        int textAreaX = dotX + dotSize + 8;
-        int textAreaW = w - textAreaX - 8;
+        int textAreaX = dotX + dotSize + 10;
+        int textAreaW = w - textAreaX - 12;
         float tx = textAreaX + (textAreaW - textSize.Width) / 2;
         float ty = (h - textSize.Height) / 2;
         g.DrawString(text, font, textBrush, tx, ty);
@@ -158,13 +158,13 @@ public class FloatingBar : Form
     private string FormatBarText()
     {
         if (_snapshot.IsOffline)
-            return "GLM: 离线";
+            return "GLM 配额监控 — 离线";
 
-        string mcp = $"{_snapshot.McpQuota.Percentage:F0}%";
-        string token = $"{_snapshot.Token5hQuota.Percentage:F0}%";
-        string calls = _snapshot.CallCount > 0 ? $" | {FormatNumber(_snapshot.CallCount)}次" : "";
+        string mcp = $"MCP {_snapshot.McpQuota.Percentage:F0}%";
+        string token = $"5h {_snapshot.Token5hQuota.Percentage:F0}%";
+        string calls = _snapshot.CallCount > 0 ? $"  ·  {FormatNumber(_snapshot.CallCount)} 次调用" : "";
 
-        return $"MCP: {mcp} | 5h: {token}{calls}";
+        return $"{mcp}   ·   {token}{calls}";
     }
 
     private static string FormatNumber(long num)

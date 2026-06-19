@@ -137,7 +137,7 @@ public class TrayApplicationContext : ApplicationContext
         bool isDark = _themeService.IsDark;
         var config = _configService.Config;
 
-        int pw = 340, ph = 230;
+        int pw = 360, ph = 280;
 
         // 全自绘面板
         var panel = new Panel { Size = new Size(pw, ph), BackColor = Color.Transparent };
@@ -177,7 +177,7 @@ public class TrayApplicationContext : ApplicationContext
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
-        // 背景色
+        // 颜色
         Color bgHeader = isDark ? Color.FromArgb(15, 52, 96) : Color.FromArgb(230, 235, 245);
         Color bgBody = isDark ? Color.FromArgb(22, 33, 62) : Color.FromArgb(245, 245, 250);
         Color bgFooter = isDark ? Color.FromArgb(0, 0, 0, 40) : Color.FromArgb(0, 0, 0, 10);
@@ -188,116 +188,116 @@ public class TrayApplicationContext : ApplicationContext
 
         // 圆角背景
         using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w, h, 10))
-        {
-            using var bgBrush = new SolidBrush(bgBody);
+        using (var bgBrush = new SolidBrush(bgBody))
             g.FillPath(bgBrush, path);
-        }
 
-        int pad = 16;
+        int pad = 20;
         int cw = w - pad * 2;
         float y = pad;
 
-        // ── Header ──
+        // ═══ Header (56px) ═══
         using (var headerBrush = new SolidBrush(bgHeader))
-            g.FillRectangle(headerBrush, 0, 0, w, 48);
+            g.FillRectangle(headerBrush, 0, 0, w, 56);
 
         // Logo
         using var logoBrush = new SolidBrush(Color.FromArgb(0, 180, 228));
-        g.FillRoundedRectangle(logoBrush, pad, 12, 24, 24, 6);
-        using var logoFont = new Font("Segoe UI", 12f, FontStyle.Bold);
+        g.FillRoundedRectangle(logoBrush, pad, 14, 28, 28, 7);
+        using var logoFont = new Font("Segoe UI", 14f, FontStyle.Bold);
         using var whiteBrush = new SolidBrush(Color.White);
         var logoSize = g.MeasureString("G", logoFont);
-        g.DrawString("G", logoFont, whiteBrush, pad + (24 - logoSize.Width) / 2, 12 + (24 - logoSize.Height) / 2);
+        g.DrawString("G", logoFont, whiteBrush, pad + (28 - logoSize.Width) / 2, 14 + (28 - logoSize.Height) / 2);
 
         // 标题
-        using var titleFont = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold);
+        using var titleFont = new Font("Microsoft YaHei UI", 14f, FontStyle.Bold);
         using var titleBrush = new SolidBrush(cText);
-        g.DrawString("GLM 配额监控", titleFont, titleBrush, pad + 30, 14);
+        g.DrawString("GLM 配额监控", titleFont, titleBrush, pad + 36, 17);
 
         // 平台标签
         string platform = DetectPlatformName();
         using var platFont = new Font("Microsoft YaHei UI", 8.5f);
         var platSize = g.MeasureString(platform, platFont);
-        int platW = (int)platSize.Width + 14;
+        int platW = (int)platSize.Width + 16;
         int platX = w - pad - platW;
         using var platBg = new SolidBrush(Color.FromArgb(30, 123, 140, 222));
-        g.FillRoundedRectangle(platBg, platX, 15, platW, 20, 10);
+        g.FillRoundedRectangle(platBg, platX, 18, platW, 22, 11);
         using var platFg = new SolidBrush(Color.FromArgb(123, 140, 222));
-        g.DrawString(platform, platFont, platFg, platX + 7, 16);
+        g.DrawString(platform, platFont, platFg, platX + 8, 19);
 
-        y = 54;
+        y = 66;
 
-        // ── 分隔线 ──
+        // ═══ 分隔线 ═══
         using var sepPen = new Pen(cSep);
         g.DrawLine(sepPen, pad, y, w - pad, y);
-        y += 10;
+        y += 16;
 
-        // ── MCP 配额行 ──
+        // ═══ MCP 配额行 ═══
         y = PaintQuotaRow(g, s.McpQuota, isDark, config, pad, y, cw, cSub, cBarBg);
-        y += 8;
+        y += 14;
 
-        // ── 5h Token 行 ──
+        // ═══ 5h Token 行 ═══
         y = PaintQuotaRow(g, s.Token5hQuota, isDark, config, pad, y, cw, cSub, cBarBg);
-        y += 10;
+        y += 16;
 
-        // ── 分隔线 ──
+        // ═══ 分隔线 ═══
         g.DrawLine(sepPen, pad, y, w - pad, y);
-        y += 10;
+        y += 16;
 
-        // ── 统计行（调用次数 | Token用量） ──
+        // ═══ 统计行 ═══
         if (!s.IsOffline)
         {
-            using var statFont = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
-            using var statSub = new Font("Microsoft YaHei UI", 8f);
+            using var statFont = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold);
+            using var statSub = new Font("Microsoft YaHei UI", 8.5f);
             using var statFg = new SolidBrush(cText);
             using var statSubFg = new SolidBrush(cSub);
 
             int colW = cw / 3;
             // 调用次数
             g.DrawString(FormatNumber(s.CallCount), statFont, statFg, pad, y);
-            g.DrawString("调用次数", statSub, statSubFg, pad, y + 18);
+            g.DrawString("调用次数 (24H)", statSub, statSubFg, pad, y + 20);
             // Token 用量
             g.DrawString(FormatTokenUsage(s.TokenUsage), statFont, statFg, pad + colW, y);
-            g.DrawString("Token 用量", statSub, statSubFg, pad + colW, y + 18);
+            g.DrawString("Token 用量 (24H)", statSub, statSubFg, pad + colW, y + 20);
         }
-        y += 40;
+        y += 48;
 
-        // ── Footer ──
+        // ═══ Footer ═══
         using (var footerBrush = new SolidBrush(bgFooter))
-            g.FillRectangle(footerBrush, 0, h - 36, w, 36);
-        g.DrawLine(sepPen, 0, h - 36, w, h - 36);
+            g.FillRectangle(footerBrush, 0, h - 40, w, 40);
+        g.DrawLine(sepPen, 0, h - 40, w, h - 40);
 
-        string timeStr = s.IsOffline ? "离线" : $"🕐 {s.Timestamp:HH:mm:ss}";
-        using var timeFont = new Font("Microsoft YaHei UI", 8.5f);
+        string timeStr = s.IsOffline ? "离线" : $"🕐 上次刷新: {s.Timestamp:HH:mm:ss}";
+        using var timeFont = new Font("Microsoft YaHei UI", 9f);
         using var timeBrush = new SolidBrush(cSub);
-        g.DrawString(timeStr, timeFont, timeBrush, pad, h - 28);
+        g.DrawString(timeStr, timeFont, timeBrush, pad, h - 30);
     }
 
     /// <summary>
-    /// 绘制单行配额（标签 + 进度条 + 百分比 + 用量文字）
+    /// 绘制单行配额（名称 + 进度条 + 百分比 + 用量小字）
+    /// 布局：第一行 [名称] [进度条] [百分比]
+    ///       第行 [用量小字]
     /// </summary>
     private static float PaintQuotaRow(Graphics g, QuotaItem item, bool isDark, AppConfig config,
         int x, float y, int cw, Color cSub, Color cBarBg)
     {
-        // 标签
-        using var labelFont = new Font("Microsoft YaHei UI", 9.5f);
+        // ── 第一行：名称 + 进度条 + 百分比 ──
+        using var labelFont = new Font("Microsoft YaHei UI", 10f);
         using var labelBrush = new SolidBrush(cSub);
         g.DrawString(item.Name, labelFont, labelBrush, x, y);
 
-        // 进度条
-        int barX = x + 70;
-        int pctW = 46;
-        int barW = cw - 70 - pctW - 4;
-        int barH = 8;
-        float barY = y + 4;
+        // 进度条（名称右侧，留出百分比空间）
+        int barX = x + 74;
+        int pctLabelW = 50;
+        int barW = cw - 74 - pctLabelW - 4;
+        int barH = 10;
+        float barY = y + 3;
 
         // 进度条背景
         using (var bgBrush = new SolidBrush(cBarBg))
-            g.FillRoundedRectangle(bgBrush, barX, barY, barW, barH, 4);
+            g.FillRoundedRectangle(bgBrush, barX, barY, barW, barH, 5);
 
-        // 进度条填充
+        // 进度条填充（渐变）
         double pct = Math.Clamp(item.Percentage, 0, 100);
-        int fillW = (int)(barW * pct / 100);
+        int fillW = Math.Max(0, (int)(barW * pct / 100));
         if (fillW > 0)
         {
             Color barColor;
@@ -309,12 +309,12 @@ public class TrayApplicationContext : ApplicationContext
                 barColor = isDark ? Color.FromArgb(0, 206, 201) : Color.FromArgb(0, 160, 140);
 
             using var fillBrush = new LinearGradientBrush(
-                new Point(barX, 0), new Point(barX + fillW, 0),
+                new Point(barX, 0), new Point(barX + Math.Max(fillW, 2), 0),
                 ControlPaint.Light(barColor), barColor);
-            g.FillRoundedRectangle(fillBrush, barX, barY, fillW, barH, 4);
+            g.FillRoundedRectangle(fillBrush, barX, barY, Math.Max(fillW, 2), barH, 5);
         }
 
-        // 百分比
+        // 百分比（进度条右侧）
         Color pctColor;
         if (pct >= config.CriticalThreshold)
             pctColor = Color.FromArgb(255, 118, 117);
@@ -323,17 +323,17 @@ public class TrayApplicationContext : ApplicationContext
         else
             pctColor = isDark ? Color.FromArgb(0, 206, 201) : Color.FromArgb(0, 160, 140);
 
-        using var pctFont = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
+        using var pctFont = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold);
         using var pctBrush = new SolidBrush(pctColor);
         g.DrawString($"{pct:F0}%", pctFont, pctBrush, barX + barW + 6, y - 1);
 
-        // 用量文字（下一行小字）
+        // ── 第二行：用量小字 ──
         string usageText = $"{FormatNumber(item.Used)} / {FormatNumber(item.Total)}";
-        using var usageFont = new Font("Microsoft YaHei UI", 8f);
+        using var usageFont = new Font("Microsoft YaHei UI", 8.5f);
         using var usageBrush = new SolidBrush(cSub);
-        g.DrawString(usageText, usageFont, usageBrush, barX, y + 14);
+        g.DrawString(usageText, usageFont, usageBrush, barX, y + 16);
 
-        return y + 28;
+        return y + 36;
     }
 
     private string DetectPlatformName()

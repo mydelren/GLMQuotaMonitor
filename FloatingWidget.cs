@@ -6,17 +6,20 @@ namespace GLMQuotaMonitor;
 
 /// <summary>
 /// 浮动配额卡片 Widget
-/// 紧凑垂直卡片：配额名称 → 进度条+百分比 → 详情
+/// 三列布局：标签 | 进度条 | 百分比，每区一行，紧凑居中
 /// </summary>
 public class FloatingWidget : Form
 {
     private const int CardWidth = 240;
-    private const int CardHeight = 190;
+    private const int CardHeight = 106;
     private const int CardHPadding = 20;
     private const int CardVPadding = 14;
-    private const int BarWidth = 120;
-    private const int BarHeight = 6;
-    private const int BarPctGap = 10;
+
+    private const int LabelColWidth = 60;
+    private const int BarWidth = 80;
+    private const int BarHeight = 10;
+    private const int PctColWidth = 50;
+    private const int ColGap = 5;
 
     private const int EdgeSnapThreshold = 10;
     private const int RevealEdgeWidth = 4;
@@ -116,91 +119,83 @@ public class FloatingWidget : Form
         int cw = w - CardHPadding * 2;
 
         // ═══ MCP 配额 ═══
-        y = DrawQuotaSection(g, _snapshot.McpQuota, cfg, isDark, x, y, cw);
-        y += 10;
+        y = DrawQuotaRow(g, _snapshot.McpQuota, cfg, isDark, x, y);
+        y += 6;
 
-        // ═══ 轻分隔线 ═══
+        // ═══ 分隔线 ═══
         Color sepColor = isDark ? Color.FromArgb(20, 255, 255, 255) : Color.FromArgb(15, 0, 0, 0);
         using (var sepPen = new Pen(sepColor))
             g.DrawLine(sepPen, x, y, x + cw, y);
-        y += 10;
+        y += 6;
 
         // ═══ 5h Token ═══
-        y = DrawQuotaSection(g, _snapshot.Token5hQuota, cfg, isDark, x, y, cw);
-        y += 10;
+        y = DrawQuotaRow(g, _snapshot.Token5hQuota, cfg, isDark, x, y);
+        y += 6;
 
         // ═══ 分隔线 ═══
         using (var sepPen = new Pen(sepColor))
             g.DrawLine(sepPen, x, y, x + cw, y);
-        y += 10;
+        y += 6;
 
-        // ═══ 统计行 ═══
+        // ═══ 统计行（居中）═══
         if (!_snapshot.IsOffline)
         {
             Color statColor = isDark ? Color.FromArgb(120, 130, 160) : Color.FromArgb(100, 100, 120);
             using var statBrush = new SolidBrush(statColor);
             string line = $"{FormatNumber(_snapshot.CallCount)} 次调用  |  {FormatTokenUsage(_snapshot.TokenUsage)} Token";
-            g.DrawString(line, _detailFont, statBrush, x, y);
+            var textSize = g.MeasureString(line, _detailFont);
+            float statsX = (w - textSize.Width) / 2;
+            g.DrawString(line, _detailFont, statBrush, statsX, y);
         }
     }
 
     /// <summary>
-    /// 绘制单个配额区（2行）
-    /// 第1行：[进度条] + [百分比]
-    /// 第2行：详情小字
+    /// 绘制单行配额（三列：标签 | 进度条 | 百分比）
     /// </summary>
-    private int DrawQuotaSection(Graphics g, QuotaItem item, AppConfig config, bool isDark,
-        int x, int y, int cw)
+    private int DrawQuotaRow(Graphics g, QuotaItem item, AppConfig config, bool isDark, int x, int y)
     {
         double pct = Math.Clamp(item.Percentage, 0, 100);
+        int rowHeight = 20;
 
-        // ── 第1行：标签 ──
+        // 列 X 位置
+        int labelX = x;
+        int barX = x + LabelColWidth + ColGap;
+        int pctX = barX + BarWidth + ColGap;
+
+        // ── 标签（左列，垂直居中）──
         Color labelColor = isDark ? Color.FromArgb(120, 130, 160) : Color.FromArgb(100, 100, 120);
         using var labelBrush = new SolidBrush(labelColor);
-        g.DrawString(item.Name, _labelFont, labelBrush, x, y);
-        y += 22;
+        float labelY = y + (rowHeight - _labelFont.GetHeight(g)) / 2;
+        g.DrawString(item.Name, _labelFont, labelBrush, labelX, labelY);
 
-        // ── 第2行：进度条 + 百分比 ──
+        // ── 进度条（中列，垂直居中）──
+        int barY = y + (rowHeight - BarHeight) / 2;
+
+        Color barBg = isDark ? Color.FromArgb(25, 255, 255, 255) : Color.FromArgb(15, 0, 0, 0);
+        using (var bgBrush = new SolidBrush(barBg))
+            g.FillRectangle(bgBrush, barX, barY, BarWidth, BarHeight);
+
         Color pctColor;
         if (pct >= config.CriticalThreshold) pctColor = Color.FromArgb(255, 118, 117);
         else if (pct >= config.WarningThreshold) pctColor = Color.FromArgb(255, 220, 100);
         else pctColor = isDark ? Color.FromArgb(0, 210, 205) : Color.FromArgb(0, 160, 140);
 
-        // 进度条背景
-        Color barBg = isDark ? Color.FromArgb(25, 255, 255, 255) : Color.FromArgb(15, 0, 0, 0);
-        using (var bgBrush = new SolidBrush(barBg))
-            g.FillRectangle(bgBrush, x, y, BarWidth, BarHeight);
-
-        // 进度条填充
         int fillW = (int)(BarWidth * pct / 100);
         if (fillW > 0)
         {
             using var fillBrush = new SolidBrush(pctColor);
-            g.FillRectangle(fillBrush, x, y, fillW, BarHeight);
+            g.FillRectangle(fillBrush, barX, barY, fillW, BarHeight);
         }
 
-        // 百分比（进度条右侧）
+        // ── 百分比（右列，右对齐，垂直居中）──
         using var pctBrush = new SolidBrush(pctColor);
         string pctText = $"{pct:F0}%";
-        g.DrawString(pctText, _valueFont, pctBrush, x + BarWidth + BarPctGap, y - 5);
+        var pctSize = g.MeasureString(pctText, _valueFont);
+        float pctDrawX = pctX + PctColWidth - pctSize.Width;
+        float pctDrawY = y + (rowHeight - pctSize.Height) / 2;
+        g.DrawString(pctText, _valueFont, pctBrush, pctDrawX, pctDrawY);
 
-        y += 18;
-
-        // ── 第3行：详情小字 ──
-        Color detailColor = isDark ? Color.FromArgb(80, 90, 115) : Color.FromArgb(140, 140, 160);
-        using var detailBrush = new SolidBrush(detailColor);
-
-        if (item.Type == "TOKENS_LIMIT" && item.ResetDateTime.HasValue)
-        {
-            var resetTime = item.ResetDateTime.Value;
-            g.DrawString($"下次重置: {resetTime:HH:mm}", _detailFont, detailBrush, x, y);
-        }
-        else if (item.Total > 0)
-        {
-            g.DrawString($"{FormatNumber(item.Used)} / {FormatNumber(item.Total)}", _detailFont, detailBrush, x, y);
-        }
-
-        return y + 14;
+        return y + rowHeight;
     }
 
     #endregion

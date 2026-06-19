@@ -110,9 +110,6 @@ public class TrayApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// 托盘图标左键点击 - 显示详情弹窗
-    /// </summary>
-    /// <summary>
     /// 配额数据更新回调（QuotaService 在后台线程触发，需 marshal 到 UI 线程）
     /// </summary>
     private void OnQuotaUpdated(QuotaSnapshot snapshot)
@@ -137,8 +134,12 @@ public class TrayApplicationContext : ApplicationContext
         string mcpPct = $"{snapshot.McpQuota.Percentage:F0}%";
         string tokenPct = $"{snapshot.Token5hQuota.Percentage:F0}%";
         string calls = FormatNumber(snapshot.CallCount);
-        string tooltip = $"GLM: MCP {mcpPct} | 5h {tokenPct} | {calls}";
-        _notifyIcon.Text = tooltip.Length > 127 ? tooltip[..127] : tooltip;
+        string resetInfo = "";
+        if (snapshot.Token5hQuota.ResetDateTime.HasValue)
+            resetInfo = $" | 重置{snapshot.Token5hQuota.ResetDateTime.Value:HH:mm}";
+        string tooltip = $"GLM: MCP {mcpPct} | 5h {tokenPct} | {calls}{resetInfo}";
+        if (tooltip.Length > 127) tooltip = tooltip[..127];
+        _notifyIcon.Text = tooltip;
 
         // 如果超限，弹通知
         if (status == QuotaStatus.Critical && !snapshot.IsOffline)

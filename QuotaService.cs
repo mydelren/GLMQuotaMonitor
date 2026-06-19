@@ -265,6 +265,8 @@ public class QuotaService : IDisposable
     {
         try
         {
+            System.Diagnostics.Debug.WriteLine($"[QuotaService] model-usage response: {json[..Math.Min(500, json.Length)]}");
+
             using var doc = JsonDocument.Parse(json);
             var root = doc.RootElement;
 
@@ -288,8 +290,16 @@ public class QuotaService : IDisposable
     {
         foreach (string name in names)
         {
-            if (element.TryGetProperty(name, out var val) && val.TryGetInt64(out long result))
+            if (!element.TryGetProperty(name, out var val))
+                continue;
+
+            // 尝试各种数值类型
+            if (val.TryGetInt64(out long result))
                 return result;
+            if (val.ValueKind == JsonValueKind.Number && val.TryGetDouble(out double d))
+                return (long)d;
+            if (val.ValueKind == JsonValueKind.String && long.TryParse(val.GetString(), out long parsed))
+                return parsed;
         }
         return 0;
     }

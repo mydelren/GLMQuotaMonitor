@@ -13,7 +13,7 @@ namespace GLMQuotaMonitor;
 public class FloatingWidget : Form
 {
     private const int CardWidth = 240;
-    private const int CardHeight = 120;
+    private const int CardHeight = 126;
     private const int CardHPadding = 20;
     private const int CardVPadding = 14;
 
@@ -190,7 +190,7 @@ public class FloatingWidget : Form
             float statsX = (w - textSize.Width) / 2;
             g.DrawString(line, _detailFont, statBrush, statsX, y);
         }
-        y += 16;
+        y += 22;
 
         // ═══ 底部行 ═══
         using var footerBrush = new SolidBrush(footerColor);

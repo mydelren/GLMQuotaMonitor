@@ -135,12 +135,15 @@ public class TrayApplicationContext : ApplicationContext
         var snapshot = _quotaService.GetLastSnapshot();
         bool isDark = _themeService.IsDark;
 
-        var panel = CreatePopupPanel(snapshot, isDark);
+        int panelWidth = 340;
+        int panelHeight = 210;
+
+        var panel = CreatePopupPanel(snapshot, isDark, panelWidth, panelHeight);
 
         var host = new ToolStripControlHost(panel)
         {
             AutoSize = false,
-            Size = new Size(320, panel.PreferredSize.Height)
+            Size = new Size(panelWidth, panelHeight)
         };
 
         _popup = new ToolStripDropDown
@@ -150,15 +153,15 @@ public class TrayApplicationContext : ApplicationContext
         };
         _popup.Items.Add(host);
 
-        // 定位到屏幕右下角（靠近托盘区域）
+        // 定位到屏幕右下角（在任务栏上方）
         var screen = Screen.PrimaryScreen!.WorkingArea;
-        _popup.Show(screen.Right - 330, screen.Bottom - panel.PreferredSize.Height - 10);
+        _popup.Show(screen.Right - panelWidth - 10, screen.Bottom - panelHeight - 10);
     }
 
     /// <summary>
-    /// 创建弹窗面板
+    /// 创建弹窗面板（固定尺寸，不用 AutoSize）
     /// </summary>
-    private Panel CreatePopupPanel(QuotaSnapshot snapshot, bool isDark)
+    private Panel CreatePopupPanel(QuotaSnapshot snapshot, bool isDark, int width, int height)
     {
         Color bgColor = isDark ? Color.FromArgb(22, 33, 62) : Color.FromArgb(245, 245, 250);
         Color textColor = isDark ? Color.FromArgb(224, 224, 224) : Color.FromArgb(30, 30, 30);
@@ -168,31 +171,31 @@ public class TrayApplicationContext : ApplicationContext
         var panel = new Panel
         {
             BackColor = bgColor,
-            Padding = new Padding(16, 12, 16, 12),
-            AutoSize = true
+            Size = new Size(width, height)
         };
 
+        int contentWidth = width - 32; // 左右各 16px padding
         int y = 12;
 
         // 标题行
         var lblTitle = CreateLabel("GLM 配额监控", 14, FontStyle.Bold, textColor, 16, y);
         panel.Controls.Add(lblTitle);
-        y += 28;
+        y += 32;
 
         // 分隔线
-        panel.Controls.Add(CreateSeparator(separatorColor, 16, y, 288));
+        panel.Controls.Add(CreateSeparator(separatorColor, 16, y, contentWidth));
         y += 12;
 
         // MCP 配额
-        y = AddQuotaRow(panel, snapshot.McpQuota, isDark, 16, y, _configService.Config);
+        y = AddQuotaRow(panel, snapshot.McpQuota, isDark, 16, y, contentWidth, _configService.Config);
         y += 8;
 
         // 5h Token
-        y = AddQuotaRow(panel, snapshot.Token5hQuota, isDark, 16, y, _configService.Config);
+        y = AddQuotaRow(panel, snapshot.Token5hQuota, isDark, 16, y, contentWidth, _configService.Config);
         y += 12;
 
         // 分隔线
-        panel.Controls.Add(CreateSeparator(separatorColor, 16, y, 288));
+        panel.Controls.Add(CreateSeparator(separatorColor, 16, y, contentWidth));
         y += 12;
 
         // 时间戳
@@ -201,20 +204,18 @@ public class TrayApplicationContext : ApplicationContext
             : $"🕐 上次刷新: {snapshot.Timestamp:HH:mm:ss}";
         var lblTime = CreateLabel(timeStr, 9, FontStyle.Regular, subTextColor, 16, y);
         panel.Controls.Add(lblTime);
-        y += 22;
 
-        // 刷新按钮
+        // 刷新按钮（右下角）
         var btnRefresh = new Button
         {
-            Text = "⟳ 立即刷新",
+            Text = "⟳ 刷新",
             FlatStyle = FlatStyle.Flat,
             ForeColor = isDark ? Color.FromArgb(123, 140, 222) : Color.FromArgb(60, 80, 180),
             BackColor = Color.Transparent,
             Font = new Font("Microsoft YaHei UI", 9f),
-            Location = new Point(200, y - 22),
-            Size = new Size(100, 22),
-            Cursor = Cursors.Hand,
-            Anchor = AnchorStyles.Top | AnchorStyles.Right
+            Location = new Point(width - 90, height - 34),
+            Size = new Size(74, 24),
+            Cursor = Cursors.Hand
         };
         btnRefresh.Click += (_, _) => RefreshQuota();
         panel.Controls.Add(btnRefresh);
@@ -224,24 +225,26 @@ public class TrayApplicationContext : ApplicationContext
 
     /// <summary>
     /// 添加一行配额信息到面板
+    /// 布局：[名称 60px] [进度条 flex] [百分比 48px]
     /// </summary>
-    private static int AddQuotaRow(Panel panel, QuotaItem item, bool isDark, int x, int y, AppConfig config)
+    private static int AddQuotaRow(Panel panel, QuotaItem item, bool isDark, int x, int y, int contentWidth, AppConfig config)
     {
-        Color textColor = isDark ? Color.FromArgb(224, 224, 224) : Color.FromArgb(30, 30, 30);
-
-        // 标签
+        // 名称标签
         var lbl = CreateLabel(item.Name, 10, FontStyle.Regular,
             isDark ? Color.FromArgb(136, 146, 176) : Color.FromArgb(100, 100, 100),
-            x, y);
+            x, y + 2);
         panel.Controls.Add(lbl);
 
         // 进度条
-        int barX = x + 72;
-        int barWidth = 170;
-        int barHeight = 8;
+        int barX = x + 64;
+        int pctLabelWidth = 48;
+        int barWidth = contentWidth - 64 - pctLabelWidth - 8;
+        int barHeight = 10;
+        int barY = y + 2;
+
         var barPanel = new Panel
         {
-            Location = new Point(barX, y + 4),
+            Location = new Point(barX, barY),
             Size = new Size(barWidth, barHeight),
             BackColor = isDark ? Color.FromArgb(26, 26, 62) : Color.FromArgb(230, 230, 235)
         };
@@ -274,10 +277,11 @@ public class TrayApplicationContext : ApplicationContext
         else
             pctColor = isDark ? Color.FromArgb(0, 206, 201) : Color.FromArgb(0, 160, 140);
 
-        var lblPct = CreateLabel($"{pctValue:F0}%", 11, FontStyle.Bold, pctColor, x + 248, y);
+        int pctX = barX + barWidth + 8;
+        var lblPct = CreateLabel($"{pctValue:F0}%", 11, FontStyle.Bold, pctColor, pctX, y);
         panel.Controls.Add(lblPct);
 
-        return y + 24;
+        return y + 26;
     }
 
     private static Label CreateLabel(string text, float fontSize, FontStyle style, Color color, int x, int y)

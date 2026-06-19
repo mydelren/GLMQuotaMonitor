@@ -10,14 +10,15 @@ namespace GLMQuotaMonitor;
 /// </summary>
 public class FloatingBar : Form
 {
-    private const int BarHeight = 30;
-    private const int BarPadding = 12;
+    private const int BarHeight = 34;
+    private const int DefaultBarWidth = 360;
     private const int EdgeSnapThreshold = 10;
     private const int AutoHideDelayMs = 500;
     private const int RevealEdgeWidth = 4;
 
     private readonly ThemeService _themeService;
     private readonly System.Windows.Forms.Timer _hideTimer;
+    private readonly Action<bool> _themeChangedHandler;
 
     private QuotaSnapshot _snapshot = new() { IsOffline = true };
     private bool _isDragging;
@@ -37,7 +38,7 @@ public class FloatingBar : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        Size = new Size(300, BarHeight);
+        Size = new Size(DefaultBarWidth, BarHeight);
 
         // 初始位置
         if (config.FloatingBarX.HasValue && config.FloatingBarY.HasValue)
@@ -47,7 +48,10 @@ public class FloatingBar : Form
         else
         {
             var screen = Screen.PrimaryScreen!.WorkingArea;
-            Location = new Point(screen.Right - 320, screen.Bottom - 60);
+            // 居中偏右，任务栏上方
+            Location = new Point(
+                screen.Right - DefaultBarWidth - 20,
+                screen.Top + screen.Height / 2 - BarHeight / 2);
         }
 
         // 自动隐藏定时器
@@ -72,8 +76,9 @@ public class FloatingBar : Form
             if (_isSnapped) _hideTimer.Start();
         };
 
-        // 主题变更时重绘
-        _themeService.ThemeChanged += (_) => Invalidate();
+        // 主题变更时重绘（存引用以便正确取消订阅）
+        _themeChangedHandler = (_) => Invalidate();
+        _themeService.ThemeChanged += _themeChangedHandler;
     }
 
     /// <summary>
@@ -83,7 +88,7 @@ public class FloatingBar : Form
     {
         _snapshot = snapshot;
         if (InvokeRequired)
-            Invoke(Invalidate);
+            BeginInvoke(() => Invalidate());
         else
             Invalidate();
     }
@@ -101,24 +106,37 @@ public class FloatingBar : Form
 
         // 背景
         Color bgColor = isDark
-            ? Color.FromArgb(210, 22, 33, 62)
-            : Color.FromArgb(230, 245, 245, 250);
+            ? Color.FromArgb(220, 22, 33, 62)
+            : Color.FromArgb(240, 245, 245, 250);
 
         using (var brush = new SolidBrush(bgColor))
         {
             g.FillRectangle(brush, ClientRectangle);
         }
 
+        // 状态指示小圆点
+        Color dotColor = _snapshot.Status switch
+        {
+            QuotaStatus.Normal => Color.FromArgb(0, 180, 0),
+            QuotaStatus.Warning => Color.FromArgb(230, 180, 0),
+            QuotaStatus.Critical => Color.FromArgb(200, 0, 0),
+            _ => Color.FromArgb(128, 128, 128)
+        };
+        using (var dotBrush = new SolidBrush(dotColor))
+        {
+            g.FillEllipse(dotBrush, 10, Height / 2 - 4, 8, 8);
+        }
+
         // 文字
         string text = FormatBarText();
         Color textColor = isDark ? Color.FromArgb(224, 224, 224) : Color.FromArgb(30, 30, 30);
-        using var font = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold);
+        using var font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
         using var textBrush = new SolidBrush(textColor);
 
         var textSize = g.MeasureString(text, font);
-        float x = (Width - textSize.Width) / 2;
-        float y = (Height - textSize.Height) / 2;
-        g.DrawString(text, font, textBrush, x, y);
+        float tx = 24; // 圆点右侧
+        float ty = (Height - textSize.Height) / 2;
+        g.DrawString(text, font, textBrush, tx, ty);
     }
 
     /// <summary>
@@ -159,7 +177,7 @@ public class FloatingBar : Form
                 _isSnapped = false;
                 _isExpanded = false;
                 _snapEdge = DockStyle.None;
-                Size = new Size(300, BarHeight);
+                Size = new Size(DefaultBarWidth, BarHeight);
                 ApplyRoundedCorners();
             }
         }
@@ -273,7 +291,7 @@ public class FloatingBar : Form
         if (disposing)
         {
             _hideTimer.Dispose();
-            _themeService.ThemeChanged -= (_) => Invalidate();
+            _themeService.ThemeChanged -= _themeChangedHandler;
         }
         base.Dispose(disposing);
     }

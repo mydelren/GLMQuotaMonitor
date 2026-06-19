@@ -32,7 +32,6 @@ public class FloatingBar : Form
     // 缓存字体（避免每次 Paint 创建）
     private readonly Font _labelFont = new("Segoe UI", 8.5f);
     private readonly Font _valueFont = new("Segoe UI", 10.5f, FontStyle.Bold);
-    private readonly Font _smallFont = new("Segoe UI", 8f);
 
     public FloatingBar(ThemeService themeService, ConfigService configService)
     {
@@ -318,7 +317,6 @@ public class FloatingBar : Form
             _themeService.ThemeChanged -= _themeChangedHandler;
             _labelFont.Dispose();
             _valueFont.Dispose();
-            _smallFont.Dispose();
         }
         base.Dispose(disposing);
     }

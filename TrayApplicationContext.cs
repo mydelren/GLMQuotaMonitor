@@ -251,7 +251,7 @@ public class TrayApplicationContext : ApplicationContext
             using var statFg = new SolidBrush(cText);
             using var statSubFg = new SolidBrush(cSub);
 
-            int colW = cw / 3;
+            int colW = cw / 2;
             // 调用次数
             g.DrawString(FormatNumber(s.CallCount), statFont, statFg, pad, y);
             g.DrawString("调用次数 (24H)", statSub, statSubFg, pad, y + 20);
@@ -317,10 +317,15 @@ public class TrayApplicationContext : ApplicationContext
             else
                 barColor = isDark ? Color.FromArgb(0, 206, 201) : Color.FromArgb(0, 160, 140);
 
+            int safeW = Math.Max(fillW, 2);
             using var fillBrush = new LinearGradientBrush(
-                new Point(x, 0), new Point(x + Math.Max(fillW, 2), 0),
+                new Point(x, 0), new Point(x + safeW, 0),
                 ControlPaint.Light(barColor), barColor);
-            g.FillRoundedRectangle(fillBrush, x, barY, Math.Max(fillW, 2), barH, 4);
+            // 宽度不足圆角直径时用普通矩形，避免变形
+            if (safeW < 10)
+                g.FillRectangle(fillBrush, x, barY, safeW, barH);
+            else
+                g.FillRoundedRectangle(fillBrush, x, barY, safeW, barH, 4);
         }
 
         // ── 第三行：用量小字（进度条下方）──

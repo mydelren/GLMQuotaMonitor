@@ -15,6 +15,7 @@ public class TrayApplicationContext : ApplicationContext
     private readonly ConfigService _configService;
     private readonly QuotaService _quotaService;
     private readonly ThemeService _themeService;
+    private readonly SynchronizationContext? _syncContext;
 
     private ToolStripMenuItem? _floatingBarToggle;
     private ToolStripMenuItem? _autoStartToggle;
@@ -23,6 +24,7 @@ public class TrayApplicationContext : ApplicationContext
 
     public TrayApplicationContext()
     {
+        _syncContext = SynchronizationContext.Current;
         _configService = new ConfigService();
         _quotaService = new QuotaService();
         _themeService = new ThemeService();
@@ -151,7 +153,6 @@ public class TrayApplicationContext : ApplicationContext
             FlatStyle = FlatStyle.Flat,
             ForeColor = isDark ? Color.FromArgb(123, 140, 222) : Color.FromArgb(60, 80, 180),
             BackColor = Color.Transparent,
-            Font = new Font("Microsoft YaHei UI", 9f),
             Location = new Point(pw - 80, ph - 32),
             Size = new Size(68, 22),
             Cursor = Cursors.Hand,
@@ -353,10 +354,18 @@ public class TrayApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// 配额数据更新回调
+    /// 配额数据更新回调（QuotaService 在后台线程触发，需 marshal 到 UI 线程）
     /// </summary>
     private void OnQuotaUpdated(QuotaSnapshot snapshot)
     {
+        if (SynchronizationContext.Current == null)
+        {
+            // 当前不在 UI 线程，通过 SynchronizationContext 调度
+            var syncCtx = _syncContext;
+            if (syncCtx != null)
+                syncCtx.Post(_ => OnQuotaUpdated(snapshot), null);
+            return;
+        }
         if (!_notifyIcon.Visible) return;
 
         var config = _configService.Config;

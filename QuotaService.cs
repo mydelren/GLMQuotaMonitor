@@ -119,7 +119,9 @@ public class QuotaService : IDisposable
             {
                 IsOffline = true,
                 McpQuota = _lastSnapshot.McpQuota,
-                Token5hQuota = _lastSnapshot.Token5hQuota
+                Token5hQuota = _lastSnapshot.Token5hQuota,
+                CallCount = _lastSnapshot.CallCount,
+                TokenUsage = _lastSnapshot.TokenUsage
             };
             _lastSnapshot = offline;
             QuotaUpdated?.Invoke(offline);
@@ -135,10 +137,14 @@ public class QuotaService : IDisposable
             var quotaTask = FetchJson(domain, "/api/monitor/usage/quota/limit", token, ct);
             var usageTask = FetchModelUsage(domain, token, ct);
 
-            await Task.WhenAll(quotaTask, usageTask);
-
+            // 等待主接口，model-usage 单独处理异常
+            await quotaTask;
             var snapshot = ParseQuotaResponse(quotaTask.Result);
-            ParseModelUsage(usageTask.Result, snapshot);
+
+            if (usageTask.IsCompletedSuccessfully)
+                ParseModelUsage(usageTask.Result, snapshot);
+            else if (usageTask.IsFaulted)
+                usageTask.Exception?.Handle(_ => true); // 消除未观察异常警告
             snapshot.Timestamp = DateTime.Now;
             snapshot.IsOffline = false;
 

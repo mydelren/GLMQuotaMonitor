@@ -13,7 +13,7 @@ namespace GLMQuotaMonitor;
 public class FloatingWidget : Form
 {
     private const int CardWidth = 240;
-    private const int CardHeight = 138;
+    private const int CardHeight = 120;
     private const int CardHPadding = 20;
     private const int CardVPadding = 14;
 
@@ -151,7 +151,6 @@ public class FloatingWidget : Form
         // Catppuccin 颜色
         Color bg = isDark ? Color.FromArgb(30, 30, 46) : Color.FromArgb(239, 241, 245);
         Color borderColor = isDark ? Color.FromArgb(49, 50, 68) : Color.FromArgb(204, 208, 218);
-        Color lineColor = isDark ? Color.FromArgb(69, 71, 90) : Color.FromArgb(188, 192, 204);
         Color statColor = isDark ? Color.FromArgb(127, 132, 156) : Color.FromArgb(140, 143, 161);
         Color footerColor = isDark ? Color.FromArgb(88, 91, 112) : Color.FromArgb(156, 160, 176);
 
@@ -178,12 +177,7 @@ public class FloatingWidget : Form
 
         // ═══ 5h Token ═══
         y = DrawQuotaRow(g, _snapshot.Token5hQuota, cfg, isDark, x, y);
-        y += 10;
-
-        // ═══ 分隔线 ═══
-        using (var linePen = new Pen(lineColor))
-            g.DrawLine(linePen, x, y, x + cw, y);
-        y += 6;
+        y += 12;
 
         // ═══ 统计行（居中）═══
         if (!_snapshot.IsOffline)
@@ -195,11 +189,6 @@ public class FloatingWidget : Form
             g.DrawString(line, _detailFont, statBrush, statsX, y);
         }
         y += 16;
-
-        // ═══ 分隔线 ═══
-        using (var linePen = new Pen(lineColor))
-            g.DrawLine(linePen, x, y, x + cw, y);
-        y += 8;
 
         // ═══ 底部行 ═══
         using var footerBrush = new SolidBrush(footerColor);

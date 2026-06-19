@@ -228,7 +228,13 @@ public class TrayApplicationContext : ApplicationContext
     {
         if (_floatingBar != null) return;
 
-        _floatingBar = new FloatingWidget(_themeService, _configService, RefreshQuota);
+        _floatingBar = new FloatingWidget(
+            _themeService, _configService,
+            RefreshQuota,
+            ToggleFloatingBar,
+            ToggleAutoStart,
+            CycleTheme,
+            ShowSettings);
         _floatingBar.UpdateData(_quotaService.GetLastSnapshot());
         _floatingBar.Show();
     }
@@ -250,6 +256,45 @@ public class TrayApplicationContext : ApplicationContext
     {
         using var form = new SettingsForm(_configService, _themeService);
         form.ShowDialog();
+    }
+
+    /// <summary>
+    /// 切换浮动条显示/隐藏
+    /// </summary>
+    private void ToggleFloatingBar()
+    {
+        var config = _configService.Config;
+        config.ShowFloatingBar = !config.ShowFloatingBar;
+        _configService.Save(config);
+        if (_floatingBarToggle != null) _floatingBarToggle.Checked = config.ShowFloatingBar;
+    }
+
+    /// <summary>
+    /// 切换开机自启动
+    /// </summary>
+    private void ToggleAutoStart()
+    {
+        var config = _configService.Config;
+        config.AutoStart = !config.AutoStart;
+        _configService.Save(config);
+        SetAutoStart(config.AutoStart);
+        if (_autoStartToggle != null) _autoStartToggle.Checked = config.AutoStart;
+    }
+
+    /// <summary>
+    /// 循环切换主题：Auto → Dark → Light → Auto
+    /// </summary>
+    private void CycleTheme()
+    {
+        var config = _configService.Config;
+        config.Theme = config.Theme switch
+        {
+            ThemeMode.Auto => ThemeMode.Dark,
+            ThemeMode.Dark => ThemeMode.Light,
+            ThemeMode.Light => ThemeMode.Auto,
+            _ => ThemeMode.Auto
+        };
+        _configService.Save(config);
     }
 
     /// <summary>

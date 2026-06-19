@@ -6,22 +6,24 @@ namespace GLMQuotaMonitor;
 
 /// <summary>
 /// 浮动配额卡片 Widget
-/// 三列布局：标签 | 进度条 | 百分比，每区一行，紧凑居中
-/// 底部：刷新按钮 + 更新时间
+/// 三列布局：标签 | 进度条 | 百分比
+/// Catppuccin Mocha (深色) / Latte (浅色) 配色
+/// 右键菜单：刷新、浮动条、自启、主题、设置、退出
 /// </summary>
 public class FloatingWidget : Form
 {
     private const int CardWidth = 240;
-    private const int CardHeight = 130;
+    private const int CardHeight = 134;
     private const int CardHPadding = 20;
     private const int CardVPadding = 14;
     private const int Inset = 2;
 
     private const int LabelColWidth = 70;
-    private const int BarWidth = 70;
+    private const int BarWidth = 65;
     private const int BarHeight = 14;
     private const int PctColWidth = 50;
-    private const int ColGap = 5;
+    private const int ColGap = 10;
+    private const int BarPctGap = 5;
     private const int RowHeight = 24;
 
     private const int EdgeSnapThreshold = 10;
@@ -31,6 +33,10 @@ public class FloatingWidget : Form
     private readonly ThemeService _themeService;
     private readonly ConfigService _configService;
     private readonly Action _onRefresh;
+    private readonly Action _onToggleFloat;
+    private readonly Action _onToggleAutoStart;
+    private readonly Action _onCycleTheme;
+    private readonly Action _onShowSettings;
     private readonly System.Windows.Forms.Timer _hideTimer;
     private readonly Action<bool> _themeChangedHandler;
 
@@ -40,7 +46,6 @@ public class FloatingWidget : Form
     private bool _isSnapped;
     private DockStyle _snapEdge = DockStyle.None;
     private bool _isExpanded;
-    private Rectangle _refreshBtnRect;
 
     // 缓存字体
     private readonly Font _labelFont = new("Segoe UI", 9f);
@@ -48,11 +53,22 @@ public class FloatingWidget : Form
     private readonly Font _detailFont = new("Segoe UI", 8f);
     private readonly Font _tinyFont = new("Segoe UI", 7.5f);
 
-    public FloatingWidget(ThemeService themeService, ConfigService configService, Action onRefresh)
+    public FloatingWidget(
+        ThemeService themeService,
+        ConfigService configService,
+        Action onRefresh,
+        Action onToggleFloat,
+        Action onToggleAutoStart,
+        Action onCycleTheme,
+        Action onShowSettings)
     {
         _themeService = themeService;
         _configService = configService;
         _onRefresh = onRefresh;
+        _onToggleFloat = onToggleFloat;
+        _onToggleAutoStart = onToggleAutoStart;
+        _onCycleTheme = onCycleTheme;
+        _onShowSettings = onShowSettings;
         var config = configService.Config;
 
         FormBorderStyle = FormBorderStyle.None;
@@ -71,6 +87,31 @@ public class FloatingWidget : Form
             var screen = Screen.PrimaryScreen!.WorkingArea;
             Location = new Point(screen.Right - CardWidth - 20, screen.Top + screen.Height / 2 - CardHeight / 2);
         }
+
+        // 右键菜单
+        var menu = new ContextMenuStrip();
+        var refreshItem = new ToolStripMenuItem("⟳ 立即刷新");
+        refreshItem.Click += (_, _) => _onRefresh();
+        menu.Items.Add(refreshItem);
+        menu.Items.Add(new ToolStripSeparator());
+        var floatToggle = new ToolStripMenuItem("显示浮动条") { CheckOnClick = true, Checked = true };
+        floatToggle.Click += (_, _) => _onToggleFloat();
+        menu.Items.Add(floatToggle);
+        var autoStartToggle = new ToolStripMenuItem("开机自启动") { CheckOnClick = true, Checked = config.AutoStart };
+        autoStartToggle.Click += (_, _) => _onToggleAutoStart();
+        menu.Items.Add(autoStartToggle);
+        menu.Items.Add(new ToolStripSeparator());
+        var themeItem = new ToolStripMenuItem("☀ 切换主题");
+        themeItem.Click += (_, _) => _onCycleTheme();
+        menu.Items.Add(themeItem);
+        var settingsItem = new ToolStripMenuItem("⚙ 设置");
+        settingsItem.Click += (_, _) => _onShowSettings();
+        menu.Items.Add(settingsItem);
+        menu.Items.Add(new ToolStripSeparator());
+        var exitItem = new ToolStripMenuItem("✕ 退出");
+        exitItem.Click += (_, _) => Application.Exit();
+        menu.Items.Add(exitItem);
+        ContextMenuStrip = menu;
 
         _hideTimer = new System.Windows.Forms.Timer { Interval = AutoHideDelayMs };
         _hideTimer.Tick += (_, _) => CollapseIfSnapped();
@@ -109,15 +150,20 @@ public class FloatingWidget : Form
         var cfg = _configService.Config;
         int w = Width, h = Height;
 
-        // 背景（内缩 2px，避免 TransparencyKey 抗锯齿问题）
-        Color bg = isDark ? Color.FromArgb(235, 18, 24, 42) : Color.FromArgb(245, 248, 252);
+        // Catppuccin 颜色
+        Color bg = isDark ? Color.FromArgb(30, 30, 46) : Color.FromArgb(239, 241, 245);
+        Color borderColor = isDark ? Color.FromArgb(49, 50, 68) : Color.FromArgb(204, 208, 218);
+        Color lineColor = isDark ? Color.FromArgb(69, 71, 90) : Color.FromArgb(188, 192, 204);
+        Color statColor = isDark ? Color.FromArgb(127, 132, 156) : Color.FromArgb(140, 143, 161);
+        Color footerColor = isDark ? Color.FromArgb(88, 91, 112) : Color.FromArgb(156, 160, 176);
+
+        // 背景（内缩 2px）
         using (var bgBrush = new SolidBrush(bg))
         using (var path = GraphicsExtensions.MakeRoundRect(Inset, Inset, w - Inset * 2, h - Inset * 2, 4))
             g.FillPath(bgBrush, path);
 
         // 边框
-        Color border = isDark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(30, 0, 0, 0);
-        using (var borderPen = new Pen(border))
+        using (var borderPen = new Pen(borderColor))
         using (var path = GraphicsExtensions.MakeRoundRect(Inset, Inset, w - Inset * 2 - 1, h - Inset * 2 - 1, 4))
             g.DrawPath(borderPen, path);
 
@@ -133,10 +179,14 @@ public class FloatingWidget : Form
         y = DrawQuotaRow(g, _snapshot.Token5hQuota, cfg, isDark, x, y);
         y += 10;
 
+        // ═══ 分隔线 ═══
+        using (var linePen = new Pen(lineColor))
+            g.DrawLine(linePen, x, y, x + cw, y);
+        y += 6;
+
         // ═══ 统计行（居中）═══
         if (!_snapshot.IsOffline)
         {
-            Color statColor = isDark ? Color.FromArgb(120, 130, 160) : Color.FromArgb(100, 100, 120);
             using var statBrush = new SolidBrush(statColor);
             string line = $"{FormatNumber(_snapshot.CallCount)} 次调用  |  {FormatTokenUsage(_snapshot.TokenUsage)} Token";
             var textSize = g.MeasureString(line, _detailFont);
@@ -146,26 +196,24 @@ public class FloatingWidget : Form
         y += 12;
 
         // ═══ 分隔线 ═══
-        Color lineColor = isDark ? Color.FromArgb(20, 255, 255, 255) : Color.FromArgb(15, 0, 0, 0);
         using (var linePen = new Pen(lineColor))
             g.DrawLine(linePen, x, y, x + cw, y);
         y += 8;
 
-        // ═══ 刷新行 ═══
-        // 左侧：刷新按钮（低调）
-        Color refreshColor = isDark ? Color.FromArgb(100, 110, 150) : Color.FromArgb(80, 90, 120);
-        using var refreshBrush = new SolidBrush(refreshColor);
-        string refreshText = "⟳ 刷新";
-        g.DrawString(refreshText, _labelFont, refreshBrush, x, y);
-        var refreshSize = g.MeasureString(refreshText, _labelFont);
-        _refreshBtnRect = new Rectangle(x, y, (int)refreshSize.Width + 4, (int)refreshSize.Height + 2);
+        // ═══ 底部行 ═══
+        using var footerBrush = new SolidBrush(footerColor);
 
-        // 右侧：更新时间（更小更淡）
-        Color timeColor = isDark ? Color.FromArgb(70, 80, 100) : Color.FromArgb(150, 150, 165);
-        using var timeBrush = new SolidBrush(timeColor);
+        // 左侧：重置时间
+        if (_snapshot.Token5hQuota.ResetDateTime.HasValue)
+        {
+            string resetText = $"重置 {_snapshot.Token5hQuota.ResetDateTime.Value:HH:mm}";
+            g.DrawString(resetText, _tinyFont, footerBrush, x, y);
+        }
+
+        // 右侧：更新时间
         string timeText = _snapshot.IsOffline ? "离线" : $"{_snapshot.Timestamp:HH:mm} 更新";
         var timeSize = g.MeasureString(timeText, _tinyFont);
-        g.DrawString(timeText, _tinyFont, timeBrush, x + cw - timeSize.Width, y + 1);
+        g.DrawString(timeText, _tinyFont, footerBrush, x + cw - timeSize.Width, y);
     }
 
     /// <summary>
@@ -175,34 +223,32 @@ public class FloatingWidget : Form
     {
         double pct = Math.Clamp(item.Percentage, 0, 100);
 
-        // 列 X 位置
         int labelX = x;
         int barX = x + LabelColWidth + ColGap;
-        int pctX = barX + BarWidth + ColGap;
+        int pctX = barX + BarWidth + BarPctGap;
 
-        // ── 标签（左列，垂直居中）──
-        Color labelColor = isDark ? Color.FromArgb(120, 130, 160) : Color.FromArgb(100, 100, 120);
+        // ── 标签 ──
+        Color labelColor = isDark ? Color.FromArgb(166, 173, 200) : Color.FromArgb(108, 111, 133);
         using var labelBrush = new SolidBrush(labelColor);
         float labelY = y + (RowHeight - _labelFont.GetHeight(g)) / 2;
         g.DrawString(item.Name, _labelFont, labelBrush, labelX, labelY);
 
-        // ── 进度条（中列，垂直居中）──
+        // ── 进度条 ──
         int barY = y + (RowHeight - BarHeight) / 2;
-
-        Color barBg = isDark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(25, 0, 0, 0);
+        Color barBg = isDark ? Color.FromArgb(49, 50, 68) : Color.FromArgb(204, 208, 218);
         using (var bgBrush = new SolidBrush(barBg))
             g.FillRectangle(bgBrush, barX, barY, BarWidth, BarHeight);
 
-        // 进度条颜色：MCP 蓝色，5h 青色，超限统一黄/红
+        // 颜色：MCP 蓝，5h 青，超限黄/红
         Color normalColor;
         if (item.Type == "TIME_LIMIT")
-            normalColor = isDark ? Color.FromArgb(70, 130, 230) : Color.FromArgb(50, 100, 200);
+            normalColor = isDark ? Color.FromArgb(137, 180, 250) : Color.FromArgb(30, 102, 245);
         else
-            normalColor = isDark ? Color.FromArgb(0, 210, 205) : Color.FromArgb(0, 160, 140);
+            normalColor = isDark ? Color.FromArgb(148, 226, 213) : Color.FromArgb(23, 146, 153);
 
         Color pctColor;
-        if (pct >= config.CriticalThreshold) pctColor = Color.FromArgb(255, 118, 117);
-        else if (pct >= config.WarningThreshold) pctColor = Color.FromArgb(255, 220, 100);
+        if (pct >= config.CriticalThreshold) pctColor = isDark ? Color.FromArgb(243, 139, 168) : Color.FromArgb(210, 15, 57);
+        else if (pct >= config.WarningThreshold) pctColor = isDark ? Color.FromArgb(249, 226, 175) : Color.FromArgb(223, 142, 29);
         else pctColor = normalColor;
 
         int fillW = (int)(BarWidth * pct / 100);
@@ -212,7 +258,7 @@ public class FloatingWidget : Form
             g.FillRectangle(fillBrush, barX, barY, fillW, BarHeight);
         }
 
-        // ── 百分比（右列，右对齐，垂直居中）──
+        // ── 百分比（右对齐）──
         using var pctBrush = new SolidBrush(pctColor);
         string pctText = $"{pct:F0}%";
         var pctSize = g.MeasureString(pctText, _valueFont);
@@ -230,13 +276,6 @@ public class FloatingWidget : Form
     private void OnMouseDown(object? sender, MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left) return;
-
-        // 刷新按钮命中检测
-        if (_refreshBtnRect.Contains(e.Location))
-        {
-            _onRefresh?.Invoke();
-            return;
-        }
 
         _isDragging = true;
         _dragOffset = e.Location;
@@ -282,15 +321,9 @@ public class FloatingWidget : Form
         _isExpanded = false;
         switch (edge)
         {
-            case DockStyle.Left:
-                Location = new Point(screen.Left - Width + RevealEdgeWidth, Location.Y);
-                break;
-            case DockStyle.Right:
-                Location = new Point(screen.Right - RevealEdgeWidth, Location.Y);
-                break;
-            case DockStyle.Top:
-                Location = new Point(Location.X, screen.Top - Height + RevealEdgeWidth);
-                break;
+            case DockStyle.Left: Location = new Point(screen.Left - Width + RevealEdgeWidth, Location.Y); break;
+            case DockStyle.Right: Location = new Point(screen.Right - RevealEdgeWidth, Location.Y); break;
+            case DockStyle.Top: Location = new Point(Location.X, screen.Top - Height + RevealEdgeWidth); break;
         }
     }
 

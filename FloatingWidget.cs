@@ -11,12 +11,12 @@ namespace GLMQuotaMonitor;
 public class FloatingWidget : Form
 {
     private const int CardWidth = 240;
-    private const int CardHeight = 182;
+    private const int CardHeight = 190;
     private const int CardHPadding = 20;
     private const int CardVPadding = 14;
-    private const int BarWidth = 80;
-    private const int BarHeight = 4;
-    private const int BarPctGap = 8;
+    private const int BarWidth = 120;
+    private const int BarHeight = 6;
+    private const int BarPctGap = 10;
 
     private const int EdgeSnapThreshold = 10;
     private const int RevealEdgeWidth = 4;
@@ -158,7 +158,7 @@ public class FloatingWidget : Form
         Color labelColor = isDark ? Color.FromArgb(120, 130, 160) : Color.FromArgb(100, 100, 120);
         using var labelBrush = new SolidBrush(labelColor);
         g.DrawString(item.Name, _labelFont, labelBrush, x, y);
-        y += 16;
+        y += 22;
 
         // ── 第2行：进度条 + 百分比 ──
         Color pctColor;
@@ -184,7 +184,7 @@ public class FloatingWidget : Form
         string pctText = $"{pct:F0}%";
         g.DrawString(pctText, _valueFont, pctBrush, x + BarWidth + BarPctGap, y - 5);
 
-        y += 14;
+        y += 18;
 
         // ── 第3行：详情小字 ──
         Color detailColor = isDark ? Color.FromArgb(80, 90, 115) : Color.FromArgb(140, 140, 160);

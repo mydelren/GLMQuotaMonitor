@@ -2,45 +2,66 @@
 
 Windows 桌面常驻工具，实时监控智谱 AI (GLM) / Z.ai 的 API 使用配额。
 
-## 功能
-
-- **系统托盘常驻** — 图标颜色直观反映配额状态（绿/黄/红）
-- **配额详情面板** — 点击托盘图标查看 MCP 配额、5h Token 流控、调用次数、Token 用量
-- **浮动监控条** — 可选的半透明置顶小条，贴边吸附，不用点击就能看到关键数据
-- **智能预警** — 配额超限时弹出 Windows 通知
-- **深色/浅色主题** — 支持跟随系统主题自动切换
-- **开机自启** — 可选开关
-
 ## 截图
 
-> TODO: 添加截图
+### 深色模式
+
+| 浮动卡片 | 贴边吸附 | 右键菜单 |
+|:--------:|:--------:|:--------:|
+| ![深色卡片](images/widget-dark.png) | ![深色贴边](images/edge-dock-dark.png) | ![深色菜单](images/menu-dark.png) |
+
+### 浅色模式
+
+| 浮动卡片 | 贴边吸附 |
+|:--------:|:--------:|
+| ![浅色卡片](images/widget-light.png) | ![浅色贴边](images/edge-dock-light.png) |
+
+### 设置
+
+![设置窗口](images/settings-dark.png)
+
+## 功能
+
+- **浮动卡片** — 置顶显示 MCP 配额和 5h Token 流控，实时刷新
+- **贴边吸附** — 拖到屏幕边缘自动收起为迷你进度条，悬停展开
+- **右键菜单** — 刷新、定位、开机自启、主题切换、设置
+- **智能预警** — 配额超限时弹出 Windows 通知
+- **深色/浅色主题** — Catppuccin 配色，跟随系统自动切换
+- **开机自启** — 可选开关
 
 ## 快速开始
 
-### 环境要求
+### 下载
 
-- Windows 10 (1903+) / Windows 11
-- .NET 8 运行时（[下载](https://dotnet.microsoft.com/download/dotnet/8.0)）
+从 [Releases](https://github.com/mydelren/GLMQuotaMonitor/releases) 下载：
 
-### 安装
+| 文件 | 说明 | 体积 |
+|------|------|------|
+| `GLMQuotaMonitor-light.exe` | 轻量版（框架依赖） | ~200KB |
+| `GLMQuotaMonitor-full.exe` | 完整版（自包含） | ~68MB |
 
-1. 下载最新 Release 的 exe 文件
-2. 双击运行
-3. 首次启动时，程序会尝试读取环境变量 `ANTHROPIC_AUTH_TOKEN`
-4. 如未配置，会弹出设置窗口，手动填入 API Key
+**轻量版** 需要已安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)。如果不确定，请下载**完整版**。
+
+### 首次运行
+
+1. 双击 exe 运行
+2. 首次启动时，程序会尝试读取环境变量 `ANTHROPIC_AUTH_TOKEN`
+3. 如未配置，会弹出设置窗口，手动填入 API Key
 
 ### 从源码构建
 
 ```bash
-# 克隆仓库
 git clone https://github.com/mydelren/GLMQuotaMonitor.git
 cd GLMQuotaMonitor
 
 # 构建
 dotnet build -c Release
 
-# 发布（框架依赖，单文件）
-dotnet publish -c Release -r win-x64 --self-contained false
+# 发布轻量版
+dotnet publish -c Release -r win-x64 --self-contained false -p:PublishSingleFile=true
+
+# 发布完整版
+dotnet publish -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
 ## 配置
@@ -70,32 +91,26 @@ dotnet publish -c Release -r win-x64 --self-contained false
 |------|--------|------|
 | API Key | — | 智谱/Z.ai 的 API Key |
 | 平台 | 自动检测 | 智谱 AI / Z.ai |
-| 轮询间隔 | 3 分钟 | 数据刷新频率（可配置 1-30 分钟） |
+| 轮询间隔 | 5 分钟 | 数据刷新频率（可配置 1-30 分钟） |
 | 开机自启 | 关闭 | 写入注册表 Run 键 |
 | 主题 | 自动 | 深色/浅色/跟随系统 |
-| 浮动条 | 关闭 | 是否显示浮动监控条 |
 | 警告阈值 | 50% | 图标变黄 |
 | 临界阈值 | 80% | 图标变红，弹通知 |
-
-### 配置文件位置
-
-```
-%AppData%\GLMQuotaMonitor\config.json
-```
 
 ## 错误处理
 
 - **请求超时**：10 秒
-- **重试策略**：连续失败 3 次后停止自动轮询，托盘图标变灰，需手动点击"立即刷新"重试
-- **离线显示**：网络不可用时显示最后一次成功获取的数据，图标标记为灰色
-- **启动延迟**：首次请求在启动 3 秒后执行（等待网络就绪）
+- **重试策略**：连续失败 3 次后停止自动轮询，需手动刷新
+- **离线显示**：网络不可用时显示最后一次成功获取的数据
+- **启动延迟**：首次请求在启动 3 秒后执行
 
 ## 技术栈
 
-- C# / .NET 8
+- C# / .NET 8 LTS
 - Windows Forms
 - 目标框架：`net8.0-windows`
 - 运行时：`win-x64`
+- 配色：[Catppuccin](https://catppuccin.com/) Mocha (深色) / Latte (浅色)
 
 ## API 说明
 
@@ -106,54 +121,8 @@ GET https://{domain}/api/monitor/usage/quota/limit
 Authorization: {your_api_key}
 ```
 
-响应格式：
-
-```json
-{
-  "data": {
-    "limits": [
-      {
-        "type": "TIME_LIMIT",
-        "usage": 1000,
-        "currentValue": 250,
-        "remaining": 750
-      },
-      {
-        "type": "TOKENS_LIMIT",
-        "usage": 500000,
-        "currentValue": 120000,
-        "remaining": 380000
-      }
-    ]
-  }
-}
-```
-
 - `TIME_LIMIT` — MCP 月度配额
 - `TOKENS_LIMIT` — 5 小时 Token 流控窗口
-
-## 项目结构
-
-```
-GLMQuotaMonitor/
-├── Program.cs                  # 入口，单实例互斥
-├── TrayApplicationContext.cs   # 托盘图标、上下文菜单、弹窗
-├── FloatingBar.cs              # 浮动监控条（贴边吸附）
-├── QuotaService.cs             # API 调用与数据解析
-├── ConfigService.cs            # 配置读写
-├── ThemeService.cs             # 主题检测（深色/浅色/自动）
-├── TrayIconFactory.cs          # 程序生成托盘图标（彩色圆点）
-├── SettingsForm.cs             # 设置窗口
-├── Models/
-│   ├── QuotaData.cs            # 配额数据模型
-│   └── AppConfig.cs            # 配置模型
-├── GLMQuotaMonitor.csproj      # 项目文件
-├── popup-demo.html             # 弹窗面板视觉稿
-├── README.md
-├── LICENSE
-└── docs/
-    └── DESIGN.md               # 设计文档
-```
 
 ## 致谢
 
@@ -161,6 +130,7 @@ GLMQuotaMonitor/
 
 - [CowanNath/GLMQuotaWatcher](https://github.com/CowanNath/GLMQuotaWatcher) — VS Code 版配额监控
 - [Safphere/glm-usage-vscode](https://github.com/Safphere/glm-usage-vscode) — VS Code 版实时用量监控
+- [Catppuccin](https://catppuccin.com/) — 配色方案
 
 ## 许可证
 

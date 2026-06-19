@@ -225,11 +225,22 @@ public class QuotaService : IDisposable
 
         foreach (var item in limits.EnumerateArray())
         {
+            // 诊断：记录原始数据
+            System.Diagnostics.Debug.WriteLine($"[QuotaService] limit item: {item}");
+
             string type = item.TryGetProperty("type", out var t) ? t.GetString() ?? "" : "";
 
             long total = GetLongAny(item, "usage", "limit_value", "limitValue");
             long used = GetLongAny(item, "currentValue", "used_value", "usedValue");
             long remaining = GetLongAny(item, "remaining", "remaining_value", "remainingValue");
+
+            // 尝试从 percentage 字段直接获取百分比（API 可能直接返回）
+            double directPct = -1;
+            if (item.TryGetProperty("percentage", out var pctElem))
+            {
+                if (pctElem.TryGetDouble(out double pctVal)) directPct = pctVal;
+                else if (pctElem.ValueKind == JsonValueKind.String && double.TryParse(pctElem.GetString(), out double pctStr)) directPct = pctStr;
+            }
 
             if (remaining == 0 && total > 0)
                 remaining = total - used;
@@ -239,7 +250,8 @@ public class QuotaService : IDisposable
                 Type = type,
                 Total = total,
                 Used = used,
-                Remaining = remaining
+                Remaining = remaining,
+                DirectPercentage = directPct
             };
 
             switch (type)

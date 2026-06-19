@@ -35,8 +35,18 @@ public class QuotaItem
     /// <summary>剩余</summary>
     public long Remaining { get; set; }
 
-    /// <summary>使用百分比 (0-100)</summary>
-    public double Percentage => Total > 0 ? (double)Used / Total * 100 : 0;
+    /// <summary>API 直接返回的百分比（-1 表示未提供，需从 Used/Total 计算）</summary>
+    public double DirectPercentage { get; set; } = -1;
+
+    /// <summary>使用百分比 (0-100)，优先使用 API 直接返回的值</summary>
+    public double Percentage
+    {
+        get
+        {
+            if (DirectPercentage >= 0) return DirectPercentage;
+            return Total > 0 ? (double)Used / Total * 100 : 0;
+        }
+    }
 }
 
 /// <summary>

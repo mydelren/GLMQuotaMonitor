@@ -95,7 +95,6 @@ public class FloatingBar : Form
 
         bool isDark = _themeService.IsDark;
         int w = Width, h = Height;
-        int pad = 14;
 
         // ── 背景（直角矩形）──
         Color bgColor = isDark
@@ -104,8 +103,19 @@ public class FloatingBar : Form
         using (var bgBrush = new SolidBrush(bgColor))
             g.FillRectangle(bgBrush, 0, 0, w, h);
 
-        // ── 状态圆点 ──
         var cfg = _configService.Config;
+
+        if (_snapshot.IsOffline)
+        {
+            Color labelColor = isDark ? Color.FromArgb(140, 150, 175) : Color.FromArgb(110, 115, 130);
+            using var offlineBrush = new SolidBrush(labelColor);
+            string text = "GLM 配额监控 — 离线";
+            var sz = g.MeasureString(text, _valueFont);
+            g.DrawString(text, _valueFont, offlineBrush, (w - sz.Width) / 2, (h - sz.Height) / 2);
+            return;
+        }
+
+        // ── 状态圆点 ──
         var status = _snapshot.GetStatus(cfg.WarningThreshold, cfg.CriticalThreshold);
         Color dotColor = status switch
         {
@@ -115,43 +125,64 @@ public class FloatingBar : Form
             _ => Color.FromArgb(128, 128, 128)
         };
         int dotSize = 8;
-        int dotX = pad;
-        int dotY = (h - dotSize) / 2;
-        using (var dotBrush = new SolidBrush(dotColor))
-            g.FillEllipse(dotBrush, dotX, dotY, dotSize, dotSize);
+        int dotGap = 12;
 
-        // ── 内容区域（圆点右侧）──
-        int contentX = dotX + dotSize + 12;
-        int contentW = w - contentX - pad;
-        float cx = contentX;
+        // ── 先测量全部内容宽度，再整体居中 ──
+        Color labelColor2 = isDark ? Color.FromArgb(140, 150, 175) : Color.FromArgb(110, 115, 130);
+        Color valueColor = isDark ? Color.FromArgb(224, 228, 235) : Color.FromArgb(35, 35, 45);
+        using var labelBrush = new SolidBrush(labelColor2);
+        using var valueBrush = new SolidBrush(valueColor);
+        using var sepBrush = new SolidBrush(isDark ? Color.FromArgb(80, 90, 115) : Color.FromArgb(180, 180, 190));
 
-        if (_snapshot.IsOffline)
+        // 预计算各段宽度
+        float totalW = dotSize + dotGap;
+        totalW += MeasureSegment(g, "MCP", _snapshot.McpQuota.Percentage, cfg, isDark);
+        totalW += MeasureSep(g);
+        totalW += MeasureSegment(g, "5h", _snapshot.Token5hQuota.Percentage, cfg, isDark);
+        if (_snapshot.CallCount > 0)
         {
-            // 离线状态
-            using var offlineBrush = new SolidBrush(isDark ? Color.FromArgb(140, 150, 175) : Color.FromArgb(100, 100, 100));
-            g.DrawString("GLM 配额监控 — 离线", _valueFont, offlineBrush, cx, (h - _valueFont.GetHeight(g)) / 2);
-            return;
+            totalW += MeasureSep(g);
+            totalW += g.MeasureString($"{FormatNumber(_snapshot.CallCount)} 次", _valueFont).Width;
         }
 
-        // ── MCP 配额 ──
-        Color labelColor = isDark ? Color.FromArgb(140, 150, 175) : Color.FromArgb(110, 115, 130);
-        Color valueColor = isDark ? Color.FromArgb(224, 228, 235) : Color.FromArgb(35, 35, 45);
-        using var labelBrush = new SolidBrush(labelColor);
-        using var valueBrush = new SolidBrush(valueColor);
+        // 居中起始位置
+        float startX = (w - totalW) / 2;
+        float cx = startX;
 
+        // ── 圆点 ──
+        int dotY = (h - dotSize) / 2;
+        using (var dotBrush = new SolidBrush(dotColor))
+            g.FillEllipse(dotBrush, cx, dotY, dotSize, dotSize);
+        cx += dotSize + dotGap;
+
+        // ── MCP 配额 ──
         cx = DrawSegment(g, "MCP", _snapshot.McpQuota.Percentage, cfg, isDark, cx, h, labelBrush, valueBrush);
-        cx = DrawSeparator(g, cx, h, isDark);
+        cx = DrawSeparator(g, cx, h, sepBrush);
 
         // ── 5h Token ──
         cx = DrawSegment(g, "5h", _snapshot.Token5hQuota.Percentage, cfg, isDark, cx, h, labelBrush, valueBrush);
 
-        // ── 调用次数（如果有数据）──
+        // ── 调用次数 ──
         if (_snapshot.CallCount > 0)
         {
-            cx = DrawSeparator(g, cx, h, isDark);
+            cx = DrawSeparator(g, cx, h, sepBrush);
             string callText = $"{FormatNumber(_snapshot.CallCount)} 次";
             g.DrawString(callText, _valueFont, valueBrush, cx, (h - _valueFont.GetHeight(g)) / 2);
         }
+    }
+
+    private float MeasureSegment(Graphics g, string label, double pct, AppConfig config, bool isDark)
+    {
+        float w = g.MeasureString(label, _labelFont).Width;
+        w += 6;
+        w += g.MeasureString($"{pct:F0}%", _valueFont).Width;
+        w += 4;
+        return w;
+    }
+
+    private float MeasureSep(Graphics g)
+    {
+        return g.MeasureString("\u00B7", _labelFont).Width + 14;
     }
 
     /// <summary>
@@ -186,15 +217,13 @@ public class FloatingBar : Form
     /// <summary>
     /// 绘制分隔点
     /// </summary>
-    private float DrawSeparator(Graphics g, float x, int h, bool isDark)
+    private float DrawSeparator(Graphics g, float x, int h, Brush sepBrush)
     {
-        Color sepColor = isDark ? Color.FromArgb(80, 90, 115) : Color.FromArgb(180, 180, 190);
-        using var sepBrush = new SolidBrush(sepColor);
-        string sep = "\u00B7"; // 中点
+        string sep = "\u00B7";
         float sepW = g.MeasureString(sep, _labelFont).Width;
         float sepY = (h - _labelFont.GetHeight(g)) / 2;
         g.DrawString(sep, _labelFont, sepBrush, x + 4, sepY);
-        return x + sepW + 10;
+        return x + sepW + 14;
     }
 
     private static string FormatNumber(long num)

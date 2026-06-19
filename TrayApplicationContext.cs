@@ -282,7 +282,7 @@ public class TrayApplicationContext : ApplicationContext
         double pct = Math.Clamp(item.Percentage, 0, 100);
 
         // ── 第一行：名称（左）+ 百分比（右）──
-        using var labelFont = new Font("Microsoft YaHei UI", 10f);
+        using var labelFont = new Font("Microsoft YaHei UI", 9.5f);
         using var labelBrush = new SolidBrush(cSub);
         g.DrawString(item.Name, labelFont, labelBrush, x, y);
 
@@ -294,14 +294,14 @@ public class TrayApplicationContext : ApplicationContext
         else
             pctColor = isDark ? Color.FromArgb(0, 206, 201) : Color.FromArgb(0, 160, 140);
 
-        using var pctFont = new Font("Microsoft YaHei UI", 11f, FontStyle.Bold);
+        using var pctFont = new Font("Microsoft YaHei UI", 12f, FontStyle.Bold);
         using var pctBrush = new SolidBrush(pctColor);
         string pctText = $"{pct:F0}%";
         var pctSize = g.MeasureString(pctText, pctFont);
-        g.DrawString(pctText, pctFont, pctBrush, x + cw - pctSize.Width, y - 1);
+        g.DrawString(pctText, pctFont, pctBrush, x + cw - pctSize.Width, y - 2);
 
-        // ── 第二行：进度条（全宽）──
-        float barY = y + 20;
+        // ── 第二行：进度条（全宽，纯色）──
+        float barY = y + 22;
         int barH = 8;
         using (var bgBrush = new SolidBrush(cBarBg))
             g.FillRoundedRectangle(bgBrush, x, barY, cw, barH, 4);
@@ -317,18 +317,14 @@ public class TrayApplicationContext : ApplicationContext
             else
                 barColor = isDark ? Color.FromArgb(0, 206, 201) : Color.FromArgb(0, 160, 140);
 
-            int safeW = Math.Max(fillW, 2);
-            using var fillBrush = new LinearGradientBrush(
-                new Point(x, 0), new Point(x + safeW, 0),
-                ControlPaint.Light(barColor), barColor);
-            // 宽度不足圆角直径时用普通矩形，避免变形
-            if (safeW < 10)
-                g.FillRectangle(fillBrush, x, barY, safeW, barH);
+            using var fillBrush = new SolidBrush(barColor);
+            if (fillW < 10)
+                g.FillRectangle(fillBrush, x, barY, fillW, barH);
             else
-                g.FillRoundedRectangle(fillBrush, x, barY, safeW, barH, 4);
+                g.FillRoundedRectangle(fillBrush, x, barY, fillW, barH, 4);
         }
 
-        // ── 第三行：用量小字（进度条下方）──
+        // ── 第三行：用量小字（进度条下方，留足间距）──
         string usageText = $"{FormatNumber(item.Used)} / {FormatNumber(item.Total)}";
         using var usageFont = new Font("Microsoft YaHei UI", 8.5f);
         using var usageBrush = new SolidBrush(cSub);

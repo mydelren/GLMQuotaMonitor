@@ -28,14 +28,15 @@ public class FloatingWidget : Form
     private const int RowHeight = 24;
 
     // ═══ 贴边显示 ═══
-    private const int EdgeRevealWidth = 12;
-    private const int EdgeStripVHeight = 80;
-    private const int EdgeStripHWidth = 126;
-    private const int EdgeMargin = 6;
-    private const int EdgeSegGap = 3;
-    private const int EdgeSegPadding = 5;
-    private const int EdgeSegInset = 1;
-    private const int EdgeRadius = 3;
+    private const int EdgeBarWidth = 10;        // 进度条宽度
+    private const int EdgeMarginDesktop = 3;    // 桌面侧留白
+    private const int EdgeMarginScreen = 5;     // 屏幕边留白
+    private const int EdgeStripVHeight = 80;    // 竖条高度
+    private const int EdgeStripHWidth = 126;    // 横条宽度
+    private const int EdgeSegGap = 3;           // 两段间距
+    private const int EdgeSegPadding = 5;       // 段内 padding
+    private const int EdgeSegInset = 1;         // 色块内缩
+    private const int EdgeRadius = 3;           // 圆角
 
     // ═══ 其他 ═══
     private const int EdgeSnapThreshold = 10;
@@ -308,9 +309,9 @@ public class FloatingWidget : Form
 
     private void PaintEdgeStripVertical(Graphics g, bool isDark, Color segBg, int w, int h)
     {
-        // 留白在屏幕边一侧，进度条面向桌面
-        int barX = _snapEdge == DockStyle.Right ? 0 : EdgeMargin;
-        int barW = EdgeRevealWidth;
+        // 留白：桌面侧 3px + 进度条 10px + 屏幕边 5px = 18px
+        int barX = _snapEdge == DockStyle.Right ? EdgeMarginDesktop : EdgeMarginScreen;
+        int barW = EdgeBarWidth;
         int barY = EdgeSegPadding;
         int barH = h - EdgeSegPadding * 2;
         int segH = (barH - EdgeSegGap) / 2;
@@ -323,11 +324,11 @@ public class FloatingWidget : Form
 
     private void PaintEdgeStripHorizontal(Graphics g, bool isDark, Color segBg, int w, int h)
     {
-        // 留白在屏幕边一侧（上），进度条面向桌面（下）
+        // 留白：屏幕边(上) 5px + 进度条区域 + 桌面侧(下) 3px = 18px
         int barX = EdgeSegPadding;
         int barW = w - EdgeSegPadding * 2;
-        int barY = EdgeMargin; // 跳过顶部留白
-        int barH = EdgeRevealWidth;
+        int barY = EdgeMarginScreen; // 跳过顶部屏幕边留白
+        int barH = EdgeBarWidth;
         int segW = (barW - EdgeSegGap) / 2;
 
         DrawEdgeSegment(g, segBg, isDark, _snapshot.McpQuota, _configService.Config,
@@ -432,15 +433,15 @@ public class FloatingWidget : Form
         switch (edge)
         {
             case DockStyle.Right:
-                Size = new Size(EdgeMargin + EdgeRevealWidth, EdgeStripVHeight);
+                Size = new Size(EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen, EdgeStripVHeight);
                 Location = new Point(screen.Right - Width, Math.Clamp(currentY, screen.Top, screen.Bottom - Height));
                 break;
             case DockStyle.Left:
-                Size = new Size(EdgeMargin + EdgeRevealWidth, EdgeStripVHeight);
+                Size = new Size(EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen, EdgeStripVHeight);
                 Location = new Point(screen.Left, Math.Clamp(currentY, screen.Top, screen.Bottom - Height));
                 break;
             case DockStyle.Top:
-                Size = new Size(EdgeStripHWidth, EdgeMargin + EdgeRevealWidth);
+                Size = new Size(EdgeStripHWidth, EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen);
                 Location = new Point(Math.Clamp(currentX, screen.Left, screen.Right - Width), screen.Top);
                 break;
         }
@@ -462,9 +463,9 @@ public class FloatingWidget : Form
         var screen = Screen.PrimaryScreen!.WorkingArea;
         switch (_snapEdge)
         {
-            case DockStyle.Left: Location = new Point(screen.Left + EdgeMargin, Location.Y); break;
-            case DockStyle.Right: Location = new Point(screen.Right - CardWidth - EdgeMargin, Location.Y); break;
-            case DockStyle.Top: Location = new Point(Location.X, screen.Top + EdgeMargin); break;
+            case DockStyle.Left: Location = new Point(screen.Left + EdgeMarginScreen, Location.Y); break;
+            case DockStyle.Right: Location = new Point(screen.Right - CardWidth - EdgeMarginScreen, Location.Y); break;
+            case DockStyle.Top: Location = new Point(Location.X, screen.Top + EdgeMarginScreen); break;
         }
 
         Invalidate();
@@ -482,15 +483,15 @@ public class FloatingWidget : Form
         switch (_snapEdge)
         {
             case DockStyle.Right:
-                Size = new Size(EdgeMargin + EdgeRevealWidth, EdgeStripVHeight);
+                Size = new Size(EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen, EdgeStripVHeight);
                 Location = new Point(screen.Right - Width, Math.Clamp(currentY, screen.Top, screen.Bottom - Height));
                 break;
             case DockStyle.Left:
-                Size = new Size(EdgeMargin + EdgeRevealWidth, EdgeStripVHeight);
+                Size = new Size(EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen, EdgeStripVHeight);
                 Location = new Point(screen.Left, Math.Clamp(currentY, screen.Top, screen.Bottom - Height));
                 break;
             case DockStyle.Top:
-                Size = new Size(EdgeStripHWidth, EdgeMargin + EdgeRevealWidth);
+                Size = new Size(EdgeStripHWidth, EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen);
                 Location = new Point(Math.Clamp(currentX, screen.Left, screen.Right - Width), screen.Top);
                 break;
         }

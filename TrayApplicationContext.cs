@@ -20,7 +20,7 @@ public class TrayApplicationContext : ApplicationContext
     private ToolStripMenuItem? _floatingBarToggle;
     private ToolStripMenuItem? _autoStartToggle;
     private ToolStripDropDown? _popup;
-    private FloatingBar? _floatingBar;
+    private FloatingWidget? _floatingBar;
 
     public TrayApplicationContext()
     {
@@ -86,7 +86,7 @@ public class TrayApplicationContext : ApplicationContext
             CheckOnClick = true,
             Checked = _configService.Config.ShowFloatingBar
         };
-        _floatingBarToggle.Click += OnToggleFloatingBar;
+        _floatingBarToggle.Click += OnToggleFloatingWidget;
         menu.Items.Add(_floatingBarToggle);
 
         _autoStartToggle = new ToolStripMenuItem("开机自启动")
@@ -409,7 +409,7 @@ public class TrayApplicationContext : ApplicationContext
         if (config.ShowFloatingBar)
             ShowFloatingBar();
         else
-            HideFloatingBar();
+            HideFloatingWidget();
     }
 
     /// <summary>
@@ -438,7 +438,7 @@ public class TrayApplicationContext : ApplicationContext
     /// <summary>
     /// 显示/隐藏浮动条
     /// </summary>
-    private void OnToggleFloatingBar(object? sender, EventArgs e)
+    private void OnToggleFloatingWidget(object? sender, EventArgs e)
     {
         var config = _configService.Config;
         config.ShowFloatingBar = _floatingBarToggle?.Checked ?? false;
@@ -464,7 +464,7 @@ public class TrayApplicationContext : ApplicationContext
     {
         if (_floatingBar != null) return;
 
-        _floatingBar = new FloatingBar(_themeService, _configService);
+        _floatingBar = new FloatingWidget(_themeService, _configService);
         _floatingBar.UpdateData(_quotaService.GetLastSnapshot());
         _floatingBar.Show();
     }
@@ -472,7 +472,7 @@ public class TrayApplicationContext : ApplicationContext
     /// <summary>
     /// 隐藏浮动条
     /// </summary>
-    private void HideFloatingBar()
+    private void HideFloatingWidget()
     {
         _floatingBar?.Close();
         _floatingBar?.Dispose();

@@ -1,0 +1,55 @@
+# GLM Quota Monitor — 项目约束文件
+
+## 开发流程约束
+
+### C1: 数据验证先行
+**任何涉及 API 数据的功能，必须先用独立测试验证数据正确，再写 UI 代码。**
+- 新功能开发顺序：API 测试 → 解析逻辑 → 单元验证 → UI 集成
+- 禁止"先写 UI 再看数据"的流程
+- 每次修改解析逻辑后，必须运行测试确认输出
+
+### C2: 子代理审查门禁
+**每次代码变更必须通过子代理审查才能推送。**
+- 审查发现的问题必须在当前轮次修复
+- 修复后必须再次审查直到 PASS
+- 不允许带着已知问题提交
+
+### C3: 视觉设计确认
+**UI 变更必须先出设计稿（HTML demo），确认后再实现。**
+- 不允许直接写代码然后让用户"看看效果"
+- 设计稿需要覆盖正常状态和异常状态（离线、超限等）
+
+## 技术约束
+
+### T1: GDI 资源管理
+- 所有 Brush、Font、Pen、GraphicsPath 必须 using 声明
+- 禁止内联 `new SolidBrush(...)` 作为方法参数
+- 缓存的字体必须在 Dispose 中释放
+
+### T2: 线程安全
+- QuotaService 的回调在后台线程触发
+- UI 更新必须通过 SynchronizationContext.Post 到 UI 线程
+- SystemEvents.UserPreferenceChanged 可能在后台线程触发
+
+### T3: 配置一致性
+- SettingsForm 保存时必须保留 FloatingBarX/Y
+- ConfigService.Save 失败时不更新内存、不触发事件
+- 配置变更必须触发完整的服务重启（轮询+UI）
+
+## API 数据约束
+
+### A1: 字段兼容
+API 字段名可能变化，必须支持多种别名：
+- `usage` / `limit_value` / `limitValue`
+- `currentValue` / `used_value` / `usedValue`
+- `remaining` / `remaining_value` / `remainingValue`
+- `percentage`（直接百分比，优先使用）
+
+### A2: 多 limit 类型
+quota/limit 可能返回多个同类型 limit：
+- TOKENS_LIMIT unit=3 → 5h 流控（取第一个）
+- TOKENS_LIMIT unit=6 → 日流控（忽略）
+- TIME_LIMIT → MCP 月度配额
+
+### A3: 数值类型兼容
+JSON 数值可能是 int、double 或 string，GetLongAny 必须全部处理。

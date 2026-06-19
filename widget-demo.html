@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>GLM 浮动 Widget 设计稿</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+    background: #0a0a1a;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+    gap: 40px;
+    color: #e0e0e0;
+  }
+  h2 { color: #888; font-size: 14px; font-weight: 400; letter-spacing: 2px; }
+
+  /* ═══════════════════════════════════════
+     方案 A：紧凑卡片（推荐）
+     ═══════════════════════════════════════ */
+  .widget-a {
+    background: rgba(18, 24, 42, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 10px;
+    padding: 14px 18px;
+    min-width: 280px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+    backdrop-filter: blur(8px);
+  }
+  .widget-a .header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .widget-a .logo {
+    width: 20px; height: 20px;
+    background: linear-gradient(135deg, #00b4d8, #0077b6);
+    border-radius: 5px;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 700; color: #fff;
+  }
+  .widget-a .title {
+    font-size: 12px;
+    font-weight: 600;
+    color: #c0c8e0;
+    letter-spacing: 0.5px;
+  }
+  .widget-a .status-dot {
+    width: 7px; height: 7px;
+    border-radius: 50%;
+    margin-left: auto;
+  }
+  .dot-green { background: #00b894; box-shadow: 0 0 6px rgba(0, 184, 148, 0.5); }
+  .dot-yellow { background: #fdcb6e; box-shadow: 0 0 6px rgba(253, 203, 110, 0.5); }
+  .dot-red { background: #e17055; box-shadow: 0 0 6px rgba(225, 112, 85, 0.5); }
+
+  .quota-section {
+    margin-bottom: 10px;
+  }
+  .quota-section:last-child { margin-bottom: 0; }
+
+  .quota-row {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .quota-label {
+    font-size: 11px;
+    color: #8892b0;
+    font-weight: 500;
+  }
+  .quota-value {
+    font-size: 16px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  .val-ok { color: #00cec9; }
+  .val-warn { color: #ffeaa7; }
+  .val-crit { color: #ff7675; }
+
+  .mini-bar {
+    height: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .mini-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+    transition: width 0.4s ease;
+  }
+  .fill-ok { background: linear-gradient(90deg, #00b894, #00cec9); }
+  .fill-warn { background: linear-gradient(90deg, #fdcb6e, #f0932b); }
+  .fill-crit { background: linear-gradient(90deg, #e17055, #d63031); }
+
+  .quota-detail {
+    font-size: 10px;
+    color: #5a6a8a;
+    margin-top: 4px;
+  }
+
+  .widget-a .footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 12px;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+  }
+  .footer-stat {
+    font-size: 10px;
+    color: #5a6a8a;
+  }
+  .footer-stat .num {
+    font-size: 13px;
+    font-weight: 600;
+    color: #c0c8e0;
+    margin-right: 3px;
+  }
+
+  /* ═══════════════════════════════════════
+     方案 B：极简横条（备选）
+     ═══════════════════════════════════════ */
+  .widget-b {
+    background: rgba(18, 24, 42, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 8px;
+    padding: 10px 16px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    box-shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+  }
+  .wb-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .wb-label {
+    font-size: 10px;
+    color: #8892b0;
+    font-weight: 500;
+  }
+  .wb-value {
+    font-size: 14px;
+    font-weight: 700;
+  }
+  .wb-sep {
+    width: 1px;
+    height: 20px;
+    background: rgba(255, 255, 255, 0.08);
+  }
+  .wb-bar {
+    width: 40px;
+    height: 4px;
+    background: rgba(255, 255, 255, 0.06);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .wb-bar-fill {
+    height: 100%;
+    border-radius: 2px;
+  }
+</style>
+</head>
+<body>
+
+<h2>方案 A — 紧凑卡片（推荐）</h2>
+<div class="widget-a">
+  <div class="header">
+    <div class="logo">G</div>
+    <div class="title">GLM 配额</div>
+    <div class="status-dot dot-green"></div>
+  </div>
+
+  <div class="quota-section">
+    <div class="quota-row">
+      <span class="quota-label">MCP 配额</span>
+      <span class="quota-value val-ok">8%</span>
+    </div>
+    <div class="mini-bar">
+      <div class="mini-bar-fill fill-ok" style="width: 8%"></div>
+    </div>
+    <div class="quota-detail">88 / 1,000</div>
+  </div>
+
+  <div class="quota-section">
+    <div class="quota-row">
+      <span class="quota-label">5h Token</span>
+      <span class="quota-value val-warn">56%</span>
+    </div>
+    <div class="mini-bar">
+      <div class="mini-bar-fill fill-warn" style="width: 56%"></div>
+    </div>
+    <div class="quota-detail">下次重置: 5h 后</div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-stat"><span class="num">970</span>次调用</div>
+    <div class="footer-stat"><span class="num">130M</span>Token</div>
+  </div>
+</div>
+
+<h2>方案 A — 预警状态</h2>
+<div class="widget-a">
+  <div class="header">
+    <div class="logo">G</div>
+    <div class="title">GLM 配额</div>
+    <div class="status-dot dot-red"></div>
+  </div>
+
+  <div class="quota-section">
+    <div class="quota-row">
+      <span class="quota-label">MCP 配额</span>
+      <span class="quota-value val-crit">87%</span>
+    </div>
+    <div class="mini-bar">
+      <div class="mini-bar-fill fill-crit" style="width: 87%"></div>
+    </div>
+    <div class="quota-detail">870 / 1,000</div>
+  </div>
+
+  <div class="quota-section">
+    <div class="quota-row">
+      <span class="quota-label">5h Token</span>
+      <span class="quota-value val-warn">63%</span>
+    </div>
+    <div class="mini-bar">
+      <div class="mini-bar-fill fill-warn" style="width: 63%"></div>
+    </div>
+    <div class="quota-detail">下次重置: 2h 后</div>
+  </div>
+
+  <div class="footer">
+    <div class="footer-stat"><span class="num">2,341</span>次调用</div>
+    <div class="footer-stat"><span class="num">1.2B</span>Token</div>
+  </div>
+</div>
+
+<h2>方案 B — 极简横条（备选）</h2>
+<div class="widget-b">
+  <div class="wb-item">
+    <div class="status-dot dot-green" style="width:6px;height:6px;border-radius:50%"></div>
+    <span class="wb-label">MCP</span>
+    <span class="wb-value val-ok">8%</span>
+    <div class="wb-bar"><div class="wb-bar-fill fill-ok" style="width:8%"></div></div>
+  </div>
+  <div class="wb-sep"></div>
+  <div class="wb-item">
+    <span class="wb-label">5h</span>
+    <span class="wb-value val-warn">56%</span>
+    <div class="wb-bar"><div class="wb-bar-fill fill-warn" style="width:56%"></div></div>
+  </div>
+  <div class="wb-sep"></div>
+  <div class="wb-item">
+    <span class="wb-value" style="color:#c0c8e0;font-size:13px">970</span>
+    <span class="wb-label">次</span>
+  </div>
+</div>
+
+</body>
+</html>

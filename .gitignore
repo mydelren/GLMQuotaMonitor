@@ -46,3 +46,4 @@ Desktop.ini
 ## Config (contains secrets)
 config.json
 devlog.md
+docs/

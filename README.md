@@ -1,4 +1,4 @@
-# GLM Quota Monitor
+# 智谱配额监控 / GLM Quota Monitor
 
 Windows 桌面常驻工具，实时监控智谱 AI (GLM) / Z.ai 的 API 使用配额。
 
@@ -131,6 +131,10 @@ Authorization: {your_api_key}
 - [CowanNath/GLMQuotaWatcher](https://github.com/CowanNath/GLMQuotaWatcher) — VS Code 版配额监控
 - [Safphere/glm-usage-vscode](https://github.com/Safphere/glm-usage-vscode) — VS Code 版实时用量监控
 - [Catppuccin](https://catppuccin.com/) — 配色方案
+
+## 关键词
+
+智谱 AI、GLM、Z.ai、配额监控、用量监控、API 监控、Coding Plan、MCP 配额、Token 限流、桌面悬浮窗、系统托盘、Windows 小工具、深色模式、Catppuccin
 
 ## 许可证
 

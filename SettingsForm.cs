@@ -308,21 +308,40 @@ public class SettingsForm : Form
     {
         Color bg = isDark ? Color.FromArgb(30, 30, 46) : Color.FromArgb(245, 245, 250);
         Color fg = isDark ? Color.FromArgb(224, 224, 224) : Color.FromArgb(30, 30, 30);
+        Color inputBg = isDark ? Color.FromArgb(40, 40, 60) : Color.White;
+        Color btnBg = isDark ? Color.FromArgb(49, 50, 68) : Color.FromArgb(230, 230, 235);
+        Color sepColor = isDark ? Color.FromArgb(69, 71, 90) : Color.FromArgb(200, 200, 210);
 
         BackColor = bg;
         ForeColor = fg;
 
         foreach (Control ctrl in Controls)
         {
-            if (ctrl is TextBox tb)
+            switch (ctrl)
             {
-                tb.BackColor = isDark ? Color.FromArgb(40, 40, 60) : Color.White;
-                tb.ForeColor = fg;
-            }
-            else if (ctrl is NumericUpDown nud)
-            {
-                nud.BackColor = isDark ? Color.FromArgb(40, 40, 60) : Color.White;
-                nud.ForeColor = fg;
+                case TextBox tb:
+                    tb.BackColor = inputBg;
+                    tb.ForeColor = fg;
+                    break;
+                case NumericUpDown nud:
+                    nud.BackColor = inputBg;
+                    nud.ForeColor = fg;
+                    break;
+                case ComboBox cmb:
+                    cmb.BackColor = inputBg;
+                    cmb.ForeColor = fg;
+                    break;
+                case Button btn:
+                    btn.FlatStyle = FlatStyle.Flat;
+                    btn.BackColor = btnBg;
+                    btn.ForeColor = fg;
+                    break;
+                case CheckBox chk:
+                    chk.ForeColor = fg;
+                    break;
+                case Panel p when p.Height == 1:
+                    p.BackColor = sepColor;
+                    break;
             }
         }
     }

@@ -45,7 +45,7 @@ public class FloatingWidget : Form
     private readonly ThemeService _themeService;
     private readonly ConfigService _configService;
     private readonly Action _onRefresh;
-    private readonly Action _onToggleFloat;
+    private readonly Action _onLocate;
     private readonly Action _onToggleAutoStart;
     private readonly Action _onCycleTheme;
     private readonly Action _onShowSettings;
@@ -69,7 +69,7 @@ public class FloatingWidget : Form
         ThemeService themeService,
         ConfigService configService,
         Action onRefresh,
-        Action onToggleFloat,
+        Action onLocate,
         Action onToggleAutoStart,
         Action onCycleTheme,
         Action onShowSettings)
@@ -77,7 +77,7 @@ public class FloatingWidget : Form
         _themeService = themeService;
         _configService = configService;
         _onRefresh = onRefresh;
-        _onToggleFloat = onToggleFloat;
+        _onLocate = onLocate;
         _onToggleAutoStart = onToggleAutoStart;
         _onCycleTheme = onCycleTheme;
         _onShowSettings = onShowSettings;
@@ -101,13 +101,16 @@ public class FloatingWidget : Form
 
         // 右键菜单
         var menu = new ContextMenuStrip();
+        if (_themeService.IsDark)
+            menu.Renderer = new ToolStripDarkRenderer();
+
         var refreshItem = new ToolStripMenuItem("⟳ 立即刷新");
         refreshItem.Click += (_, _) => _onRefresh();
         menu.Items.Add(refreshItem);
         menu.Items.Add(new ToolStripSeparator());
-        var floatToggle = new ToolStripMenuItem("显示浮动条") { CheckOnClick = true, Checked = true };
-        floatToggle.Click += (_, _) => _onToggleFloat();
-        menu.Items.Add(floatToggle);
+        var locateItem = new ToolStripMenuItem("📍 定位浮动条");
+        locateItem.Click += (_, _) => _onLocate();
+        menu.Items.Add(locateItem);
         var autoStartToggle = new ToolStripMenuItem("开机自启动") { CheckOnClick = true, Checked = config.AutoStart };
         autoStartToggle.Click += (_, _) => _onToggleAutoStart();
         menu.Items.Add(autoStartToggle);
@@ -142,6 +145,12 @@ public class FloatingWidget : Form
         {
             void Update()
             {
+                // 更新菜单渲染器
+                if (ContextMenuStrip != null)
+                    ContextMenuStrip.Renderer = isDark
+                        ? new ToolStripDarkRenderer()
+                        : new ToolStripProfessionalRenderer();
+
                 if (_isSnapped && !_isExpanded)
                     BackColor = isDark ? Color.FromArgb(24, 24, 37) : Color.FromArgb(230, 233, 239);
                 else
@@ -418,6 +427,25 @@ public class FloatingWidget : Form
     }
 
     #endregion
+
+    /// <summary>
+    /// 定位浮动条：从贴边位置展开 3 秒后收回
+    /// </summary>
+    public void Locate()
+    {
+        if (!_isSnapped || _isExpanded) return;
+
+        Expand();
+
+        var locateTimer = new System.Windows.Forms.Timer { Interval = 3000 };
+        locateTimer.Tick += (_, _) =>
+        {
+            locateTimer.Stop();
+            locateTimer.Dispose();
+            CollapseIfSnapped();
+        };
+        locateTimer.Start();
+    }
 
     #region 贴边吸附
 

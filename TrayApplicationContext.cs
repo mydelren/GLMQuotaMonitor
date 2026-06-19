@@ -17,7 +17,6 @@ public class TrayApplicationContext : ApplicationContext
     private readonly ThemeService _themeService;
     private readonly SynchronizationContext? _syncContext;
 
-    private ToolStripMenuItem? _floatingBarToggle;
     private ToolStripMenuItem? _autoStartToggle;
     private FloatingWidget? _floatingBar;
 
@@ -63,6 +62,16 @@ public class TrayApplicationContext : ApplicationContext
                 catch { }
             }, TaskScheduler.FromCurrentSynchronizationContext());
         }
+
+        // 订阅主题变更（更新菜单渲染器）
+        _themeService.ThemeChanged += OnThemeChanged;
+    }
+
+    private void OnThemeChanged(bool isDark)
+    {
+        _contextMenu.Renderer = isDark
+            ? new ToolStripDarkRenderer()
+            : new ToolStripProfessionalRenderer();
     }
 
     /// <summary>
@@ -71,6 +80,8 @@ public class TrayApplicationContext : ApplicationContext
     private ContextMenuStrip CreateContextMenu()
     {
         var menu = new ContextMenuStrip();
+        if (_themeService.IsDark)
+            menu.Renderer = new ToolStripDarkRenderer();
 
         var settingsItem = new ToolStripMenuItem("⚙ 设置");
         settingsItem.Click += (_, _) => ShowSettings();
@@ -78,13 +89,9 @@ public class TrayApplicationContext : ApplicationContext
 
         menu.Items.Add(new ToolStripSeparator());
 
-        _floatingBarToggle = new ToolStripMenuItem("显示浮动条")
-        {
-            CheckOnClick = true,
-            Checked = _configService.Config.ShowFloatingBar
-        };
-        _floatingBarToggle.Click += OnToggleFloatingWidget;
-        menu.Items.Add(_floatingBarToggle);
+        var locateItem = new ToolStripMenuItem("📍 定位浮动条");
+        locateItem.Click += (_, _) => LocateFloatingBar();
+        menu.Items.Add(locateItem);
 
         _autoStartToggle = new ToolStripMenuItem("开机自启动")
         {
@@ -200,13 +207,11 @@ public class TrayApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// 显示/隐藏浮动条
+    /// 定位浮动条（从贴边位置展开 3 秒后收回）
     /// </summary>
-    private void OnToggleFloatingWidget(object? sender, EventArgs e)
+    private void LocateFloatingBar()
     {
-        var config = _configService.Config;
-        config.ShowFloatingBar = _floatingBarToggle?.Checked ?? false;
-        _configService.Save(config);
+        _floatingBar?.Locate();
     }
 
     /// <summary>
@@ -231,7 +236,7 @@ public class TrayApplicationContext : ApplicationContext
         _floatingBar = new FloatingWidget(
             _themeService, _configService,
             RefreshQuota,
-            ToggleFloatingBar,
+            LocateFloatingBar,
             ToggleAutoStart,
             CycleTheme,
             ShowSettings);
@@ -256,17 +261,6 @@ public class TrayApplicationContext : ApplicationContext
     {
         using var form = new SettingsForm(_configService, _themeService);
         form.ShowDialog();
-    }
-
-    /// <summary>
-    /// 切换浮动条显示/隐藏
-    /// </summary>
-    private void ToggleFloatingBar()
-    {
-        var config = _configService.Config;
-        config.ShowFloatingBar = !config.ShowFloatingBar;
-        _configService.Save(config);
-        if (_floatingBarToggle != null) _floatingBarToggle.Checked = config.ShowFloatingBar;
     }
 
     /// <summary>
@@ -350,6 +344,7 @@ public class TrayApplicationContext : ApplicationContext
     {
         if (disposing)
         {
+            _themeService.ThemeChanged -= OnThemeChanged;
             _notifyIcon.Visible = false;
             _notifyIcon.Dispose();
             _contextMenu.Dispose();

@@ -33,7 +33,7 @@ public class AppConfig
     public PlatformType Platform { get; set; } = PlatformType.Auto;
 
     /// <summary>轮询间隔（分钟）</summary>
-    public int PollingIntervalMinutes { get; set; } = 3;
+    public int PollingIntervalMinutes { get; set; } = 5;
 
     /// <summary>开机自启动</summary>
     public bool AutoStart { get; set; }

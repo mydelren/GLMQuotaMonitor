@@ -23,7 +23,6 @@ jobs:
           -r win-x64
           --self-contained false
           -p:PublishSingleFile=true
-          -p:EnableCompressionInSingleFile=true
           -o publish/light
 
       - name: 构建完整版（自包含）

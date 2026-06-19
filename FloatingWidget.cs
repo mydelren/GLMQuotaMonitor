@@ -36,8 +36,6 @@ public class FloatingWidget : Form
     private readonly Font _labelFont = new("Segoe UI", 8.5f);
     private readonly Font _valueFont = new("Segoe UI", 13f, FontStyle.Bold);
     private readonly Font _detailFont = new("Segoe UI", 8f);
-    private readonly Font _statValueFont = new("Segoe UI", 11f, FontStyle.Bold);
-    private readonly Font _statLabelFont = new("Segoe UI", 7.5f);
 
     public FloatingWidget(ThemeService themeService, ConfigService configService)
     {
@@ -124,7 +122,7 @@ public class FloatingWidget : Form
         // 细边框
         Color border = isDark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(30, 0, 0, 0);
         using (var borderPen = new Pen(border))
-        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w - 1, h - 1, 10))
+        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w - 1, h - 1, 4))
             g.DrawPath(borderPen, path);
 
         int x = CardHPadding;
@@ -376,8 +374,6 @@ public class FloatingWidget : Form
             _labelFont.Dispose();
             _valueFont.Dispose();
             _detailFont.Dispose();
-            _statValueFont.Dispose();
-            _statLabelFont.Dispose();
         }
         base.Dispose(disposing);
     }

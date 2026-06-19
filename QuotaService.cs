@@ -253,13 +253,16 @@ public class QuotaService : IDisposable
             if (remaining == 0 && total > 0)
                 remaining = total - used;
 
+            long nextReset = GetLongAny(item, "nextResetTime", "next_reset_time", "resetTime");
+
             var quotaItem = new QuotaItem
             {
                 Type = type,
                 Total = total,
                 Used = used,
                 Remaining = remaining,
-                DirectPercentage = directPct
+                DirectPercentage = directPct,
+                NextResetTime = nextReset
             };
 
             switch (type)

@@ -22,8 +22,6 @@ public class FloatingWidget : Form
     private readonly ThemeService _themeService;
     private readonly ConfigService _configService;
     private readonly System.Windows.Forms.Timer _hideTimer;
-    private readonly System.Windows.Forms.Timer _hoverShowTimer;
-    private readonly System.Windows.Forms.Timer _hoverHideTimer;
     private readonly Action<bool> _themeChangedHandler;
 
     private QuotaSnapshot _snapshot = new() { IsOffline = true };
@@ -32,8 +30,6 @@ public class FloatingWidget : Form
     private bool _isSnapped;
     private DockStyle _snapEdge = DockStyle.None;
     private bool _isExpanded;
-
-    private DetailPanel? _detailPanel;
 
     // 缓存字体
     private readonly Font _headerFont = new("Segoe UI", 9f, FontStyle.Bold);
@@ -72,19 +68,13 @@ public class FloatingWidget : Form
         _hideTimer = new System.Windows.Forms.Timer { Interval = AutoHideDelayMs };
         _hideTimer.Tick += (_, _) => CollapseIfSnapped();
 
-        _hoverShowTimer = new System.Windows.Forms.Timer { Interval = HoverShowDelayMs };
-        _hoverShowTimer.Tick += (_, _) => ShowDetailPanel();
-
-        _hoverHideTimer = new System.Windows.Forms.Timer { Interval = HoverHideDelayMs };
-        _hoverHideTimer.Tick += (_, _) => HideDetailPanel();
-
         // 事件
         Paint += OnPaint;
         MouseDown += OnMouseDown;
         MouseMove += OnMouseMove;
         MouseUp += OnMouseUp;
-        MouseEnter += OnMouseEnter;
-        MouseLeave += OnMouseLeave;
+        MouseEnter += (_, _) => { _hideTimer.Stop(); if (_isSnapped && !_isExpanded) Expand(); };
+        MouseLeave += (_, _) => { if (_isSnapped) _hideTimer.Start(); };
 
         _themeChangedHandler = (_) =>
         {
@@ -97,8 +87,8 @@ public class FloatingWidget : Form
     public void UpdateData(QuotaSnapshot snapshot)
     {
         _snapshot = snapshot;
-        if (InvokeRequired) BeginInvoke(() => { Invalidate(); _detailPanel?.UpdateData(snapshot); });
-        else { Invalidate(); _detailPanel?.UpdateData(snapshot); }
+        if (InvokeRequired) BeginInvoke(() => Invalidate());
+        else Invalidate();
     }
 
     #region 绘制
@@ -128,7 +118,7 @@ public class FloatingWidget : Form
         // 背景
         Color bg = isDark ? Color.FromArgb(235, 18, 24, 42) : Color.FromArgb(245, 248, 252);
         using (var bgBrush = new SolidBrush(bg))
-        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w, h, 10))
+        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w, h, 4))
             g.FillPath(bgBrush, path);
 
         // 细边框
@@ -178,19 +168,16 @@ public class FloatingWidget : Form
             g.DrawLine(sepPen, x, y, x + cw, y);
         y += 10;
 
-        // ═══ 统计行 ═══
+        // ═══ 统计行（数字+单位一体，避免压占）═══
         if (!_snapshot.IsOffline)
         {
-            Color statValueColor = isDark ? Color.FromArgb(200, 205, 220) : Color.FromArgb(40, 40, 50);
-            Color statLabelColor = isDark ? Color.FromArgb(100, 110, 135) : Color.FromArgb(120, 120, 140);
-            using var svBrush = new SolidBrush(statValueColor);
-            using var slBrush = new SolidBrush(statLabelColor);
+            Color statColor = isDark ? Color.FromArgb(160, 170, 195) : Color.FromArgb(60, 60, 80);
+            using var statBrush = new SolidBrush(statColor);
 
-            int colW = cw / 2;
-            g.DrawString(FormatNumber(_snapshot.CallCount), _statValueFont, svBrush, x, y);
-            g.DrawString("次调用", _statLabelFont, slBrush, x, y + 16);
-            g.DrawString(FormatTokenUsage(_snapshot.TokenUsage), _statValueFont, svBrush, x + colW, y);
-            g.DrawString("Token", _statLabelFont, slBrush, x + colW, y + 16);
+            string callsText = $"{FormatNumber(_snapshot.CallCount)} 次调用";
+            string tokenText = $"{FormatTokenUsage(_snapshot.TokenUsage)} Token";
+            string statsLine = $"{callsText}    {tokenText}";
+            g.DrawString(statsLine, _detailFont, statBrush, x, y);
         }
     }
 
@@ -199,11 +186,13 @@ public class FloatingWidget : Form
     {
         double pct = Math.Clamp(item.Percentage, 0, 100);
 
-        // 标签行：名称（左）+ 百分比（右）
+        // ── 第一行：标签 ──
         Color labelColor = isDark ? Color.FromArgb(120, 130, 160) : Color.FromArgb(100, 100, 120);
         using var labelBrush = new SolidBrush(labelColor);
         g.DrawString(item.Name, _labelFont, labelBrush, x, y);
+        y += 16;
 
+        // ── 第二行：百分比（左）+ 进度条（右）──
         Color pctColor;
         if (pct >= config.CriticalThreshold) pctColor = Color.FromArgb(255, 118, 117);
         else if (pct >= config.WarningThreshold) pctColor = Color.FromArgb(255, 220, 100);
@@ -211,41 +200,38 @@ public class FloatingWidget : Form
 
         using var pctBrush = new SolidBrush(pctColor);
         string pctText = $"{pct:F0}%";
-        var pctSize = g.MeasureString(pctText, _valueFont);
-        g.DrawString(pctText, _valueFont, pctBrush, x + cw - pctSize.Width, y - 4);
+        g.DrawString(pctText, _valueFont, pctBrush, x, y - 3);
 
-        y += 18;
+        int pctW = (int)g.MeasureString(pctText, _valueFont).Width + 8;
+        int barX = x + pctW;
+        int barW = cw - pctW;
+        int barH = 6;
+        int barY = y + 3;
 
-        // 迷你进度条
-        int barH = 4;
         Color barBg = isDark ? Color.FromArgb(20, 255, 255, 255) : Color.FromArgb(15, 0, 0, 0);
         using (var bgBrush = new SolidBrush(barBg))
-            g.FillRectangle(bgBrush, x, y, cw, barH);
+            g.FillRectangle(bgBrush, barX, barY, barW, barH);
 
-        int fillW = (int)(cw * pct / 100);
+        int fillW = (int)(barW * pct / 100);
         if (fillW > 0)
         {
             using var fillBrush = new SolidBrush(pctColor);
-            g.FillRectangle(fillBrush, x, y, fillW, barH);
+            g.FillRectangle(fillBrush, barX, barY, fillW, barH);
         }
 
-        y += 8;
+        y += 16;
 
-        // 详情小字
+        // ── 第三行：详情小字 ──
         Color detailColor = isDark ? Color.FromArgb(80, 90, 115) : Color.FromArgb(140, 140, 160);
         using var detailBrush = new SolidBrush(detailColor);
 
-        if (item.Type == "TOKENS_LIMIT")
+        if (item.Type == "TOKENS_LIMIT" && item.ResetDateTime.HasValue)
         {
-            // 显示重置时间
-            string resetText = "重置: --:--";
-            // 从 snapshot 获取重置时间（需要从 API 原始数据中提取）
-            // 暂时显示用量
-            if (item.Total > 0)
-                resetText = $"{FormatNumber(item.Used)} / {FormatNumber(item.Total)}";
+            var resetTime = item.ResetDateTime.Value;
+            string resetText = $"重置: {resetTime:HH:mm}";
             g.DrawString(resetText, _detailFont, detailBrush, x, y);
         }
-        else
+        else if (item.Total > 0)
         {
             g.DrawString($"{FormatNumber(item.Used)} / {FormatNumber(item.Total)}", _detailFont, detailBrush, x, y);
         }
@@ -255,82 +241,14 @@ public class FloatingWidget : Form
 
     private int MeasureContentHeight()
     {
-        // header(24) + sep(10) + mcp(40) + gap(8) + token(40) + sep(10) + stats(30) = 162
+        // header(24) + sep(10) + mcp(46) + gap(8) + token(46) + sep(10) + stats(14) = 158
         int h = 24 + 10; // header + sep
-        h += 40; // mcp section
+        h += 46; // mcp section (label 16 + pct+bar 16 + detail 14)
         h += 8;  // gap
-        h += 40; // token section
+        h += 46; // token section
         h += 10; // sep
-        if (!_snapshot.IsOffline) h += 30; // stats
+        if (!_snapshot.IsOffline) h += 14; // stats (single line)
         return h;
-    }
-
-    #endregion
-
-    #region 悬停详情面板
-
-    private void OnMouseEnter(object? sender, EventArgs e)
-    {
-        _hoverHideTimer.Stop();
-        _hideTimer.Stop();
-
-        if (_isSnapped && !_isExpanded) Expand();
-
-        _hoverShowTimer.Stop();
-        _hoverShowTimer.Start();
-    }
-
-    private void OnMouseLeave(object? sender, EventArgs e)
-    {
-        _hoverShowTimer.Stop();
-
-        // 延迟隐藏，允许鼠标移到详情面板
-        _hoverHideTimer.Stop();
-        _hoverHideTimer.Start();
-
-        if (_isSnapped) _hideTimer.Start();
-    }
-
-    private void ShowDetailPanel()
-    {
-        _hoverShowTimer.Stop();
-
-        if (_detailPanel != null && !_detailPanel.IsDisposed) return;
-
-        _detailPanel = new DetailPanel(_themeService, _configService, _snapshot);
-        _detailPanel.MouseEnter += (_, _) => { _hoverHideTimer.Stop(); _hideTimer.Stop(); };
-        _detailPanel.MouseLeave += (_, _) =>
-        {
-            _hoverHideTimer.Stop();
-            _hoverHideTimer.Start();
-        };
-        _detailPanel.FormClosed += (_, _) => { _detailPanel = null; };
-
-        // 定位在 widget 下方
-        var screen = Screen.PrimaryScreen!.WorkingArea;
-        int px = Location.X;
-        int py = Location.Y + Height + 4;
-
-        // 确保不超出屏幕
-        if (py + _detailPanel.Height > screen.Bottom)
-            py = Location.Y - _detailPanel.Height - 4;
-        if (px + _detailPanel.Width > screen.Right)
-            px = screen.Right - _detailPanel.Width - 10;
-        if (px < screen.Left)
-            px = screen.Left + 10;
-
-        _detailPanel.Location = new Point(px, py);
-        _detailPanel.Show();
-    }
-
-    private void HideDetailPanel()
-    {
-        _hoverHideTimer.Stop();
-        if (_detailPanel != null && !_detailPanel.IsDisposed)
-        {
-            _detailPanel.Close();
-            _detailPanel = null;
-        }
     }
 
     #endregion
@@ -453,8 +371,6 @@ public class FloatingWidget : Form
         if (disposing)
         {
             _hideTimer.Dispose();
-            _hoverShowTimer.Dispose();
-            _hoverHideTimer.Dispose();
             _themeService.ThemeChanged -= _themeChangedHandler;
             _headerFont.Dispose();
             _labelFont.Dispose();
@@ -462,143 +378,6 @@ public class FloatingWidget : Form
             _detailFont.Dispose();
             _statValueFont.Dispose();
             _statLabelFont.Dispose();
-            _detailPanel?.Dispose();
-        }
-        base.Dispose(disposing);
-    }
-}
-
-/// <summary>
-/// 悬停详情面板（显示在 widget 下方）
-/// </summary>
-public class DetailPanel : Form
-{
-    private readonly ThemeService _themeService;
-    private QuotaSnapshot _snapshot;
-
-    private readonly Font _titleFont = new("Segoe UI", 10f, FontStyle.Bold);
-    private readonly Font _labelFont = new("Segoe UI", 9f);
-    private readonly Font _valueFont = new("Segoe UI", 12f, FontStyle.Bold);
-    private readonly Font _detailFont = new("Segoe UI", 8.5f);
-
-    public DetailPanel(ThemeService themeService, ConfigService configService, QuotaSnapshot snapshot)
-    {
-        _themeService = themeService;
-        _snapshot = snapshot;
-
-        FormBorderStyle = FormBorderStyle.None;
-        ShowInTaskbar = false;
-        TopMost = true;
-        StartPosition = FormStartPosition.Manual;
-        BackColor = Color.Magenta;
-        TransparencyKey = Color.Magenta;
-        Size = new Size(260, 200);
-
-        Paint += OnPaint;
-    }
-
-    public void UpdateData(QuotaSnapshot snapshot)
-    {
-        _snapshot = snapshot;
-        if (InvokeRequired) BeginInvoke(() => Invalidate());
-        else Invalidate();
-    }
-
-    private void OnPaint(object? sender, PaintEventArgs e)
-    {
-        var g = e.Graphics;
-        g.SmoothingMode = SmoothingMode.AntiAlias;
-        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
-
-        bool isDark = _themeService.IsDark;
-        int w = Width, h = Height;
-
-        Color bg = isDark ? Color.FromArgb(240, 18, 24, 42) : Color.FromArgb(250, 248, 252);
-        using (var bgBrush = new SolidBrush(bg))
-        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w, h, 10))
-            g.FillPath(bgBrush, path);
-
-        Color border = isDark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(30, 0, 0, 0);
-        using (var borderPen = new Pen(border))
-        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w - 1, h - 1, 10))
-            g.DrawPath(borderPen, path);
-
-        int pad = 16;
-        int y = pad;
-
-        Color titleColor = isDark ? Color.FromArgb(200, 205, 220) : Color.FromArgb(40, 40, 50);
-        Color labelColor = isDark ? Color.FromArgb(120, 130, 160) : Color.FromArgb(100, 100, 120);
-        Color valueColor = isDark ? Color.FromArgb(224, 228, 235) : Color.FromArgb(30, 30, 40);
-        Color subColor = isDark ? Color.FromArgb(80, 90, 115) : Color.FromArgb(140, 140, 160);
-
-        using var titleBrush = new SolidBrush(titleColor);
-        using var labelBrush = new SolidBrush(labelColor);
-        using var valueBrush = new SolidBrush(valueColor);
-        using var subBrush = new SolidBrush(subColor);
-
-        // 标题
-        g.DrawString("配额详情", _titleFont, titleBrush, pad, y);
-        y += 28;
-
-        // MCP 详情
-        DrawDetailRow(g, "MCP 月度配额", _snapshot.McpQuota, labelBrush, valueBrush, subBrush, pad, y, w);
-        y += 50;
-
-        // 5h Token 详情
-        DrawDetailRow(g, "5h Token 流控", _snapshot.Token5hQuota, labelBrush, valueBrush, subBrush, pad, y, w);
-        y += 50;
-
-        // 统计
-        if (!_snapshot.IsOffline)
-        {
-            Color sepColor = isDark ? Color.FromArgb(25, 255, 255, 255) : Color.FromArgb(20, 0, 0, 0);
-            using var sepPen = new Pen(sepColor);
-            g.DrawLine(sepPen, pad, y, w - pad, y);
-            y += 10;
-
-            g.DrawString($"调用次数: {FormatNumber(_snapshot.CallCount)}", _detailFont, subBrush, pad, y);
-            g.DrawString($"Token 用量: {FormatTokenUsage(_snapshot.TokenUsage)}", _detailFont, subBrush, pad, y + 16);
-        }
-    }
-
-    private void DrawDetailRow(Graphics g, string title, QuotaItem item,
-        Brush labelBrush, Brush valueBrush, Brush subBrush, int x, int y, int w)
-    {
-        g.DrawString(title, _labelFont, labelBrush, x, y);
-        y += 18;
-
-        string pctText = $"{item.Percentage:F0}%";
-        g.DrawString(pctText, _valueFont, valueBrush, x, y);
-
-        string detailText = $"{FormatNumber(item.Used)} / {FormatNumber(item.Total)}";
-        var pctW = g.MeasureString(pctText, _valueFont).Width;
-        g.DrawString(detailText, _detailFont, subBrush, x + pctW + 8, y + 4);
-    }
-
-    private static string FormatNumber(long n)
-    {
-        if (n >= 1_000_000_000) return $"{n / 1_000_000_000.0:F1}B";
-        if (n >= 1_000_000) return $"{n / 1_000_000.0:F1}M";
-        if (n >= 1_000) return $"{n / 1_000.0:F1}K";
-        return n.ToString();
-    }
-
-    private static string FormatTokenUsage(long tokens)
-    {
-        if (tokens >= 1_000_000_000) return $"{tokens / 1_000_000_000.0:F1}B";
-        if (tokens >= 1_000_000) return $"{tokens / 1_000_000.0:F0}M";
-        if (tokens >= 1_000) return $"{tokens / 1_000.0:F0}K";
-        return tokens.ToString();
-    }
-
-    protected override void Dispose(bool disposing)
-    {
-        if (disposing)
-        {
-            _titleFont.Dispose();
-            _labelFont.Dispose();
-            _valueFont.Dispose();
-            _detailFont.Dispose();
         }
         base.Dispose(disposing);
     }

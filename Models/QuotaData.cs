@@ -38,6 +38,14 @@ public class QuotaItem
     /// <summary>API 直接返回的百分比（-1 表示未提供，需从 Used/Total 计算）</summary>
     public double DirectPercentage { get; set; } = -1;
 
+    /// <summary>配额重置时间（Unix 毫秒时间戳，0 表示未知）</summary>
+    public long NextResetTime { get; set; }
+
+    /// <summary>重置时间的本地 DateTime（null 表示未知）</summary>
+    public DateTime? ResetDateTime => NextResetTime > 0
+        ? DateTimeOffset.FromUnixTimeMilliseconds(NextResetTime).LocalDateTime
+        : null;
+
     /// <summary>使用百分比 (0-100)，优先使用 API 直接返回的值</summary>
     public double Percentage
     {

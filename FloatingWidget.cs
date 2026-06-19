@@ -50,8 +50,8 @@ public class FloatingWidget : Form
         BackColor = Color.Magenta;
         TransparencyKey = Color.Magenta;
 
-        // 初始尺寸（会在 Paint 中自动调整）
-        Size = new Size(CardWidth, 200);
+        // 固定尺寸（header 24 + sep 10 + mcp 46 + gap 8 + token 46 + sep 10 + stats 14 = 158 + padding 32 = 190）
+        Size = new Size(CardWidth, 190);
 
         // 初始位置
         if (config.FloatingBarX.HasValue && config.FloatingBarY.HasValue)
@@ -101,17 +101,8 @@ public class FloatingWidget : Form
         var cfg = _configService.Config;
 
         // 预计算内容高度
-        int contentH = MeasureContentHeight();
-        int w = CardWidth;
-        int h = contentH + CardVPadding * 2;
-
-        // 自动调整窗口高度
-        if (Math.Abs(h - Height) > 2 && !_isDragging)
-        {
-            Height = h;
-            Invalidate();
-            return;
-        }
+        int w = Width;
+        int h = Height;
 
         // 背景
         Color bg = isDark ? Color.FromArgb(235, 18, 24, 42) : Color.FromArgb(245, 248, 252);
@@ -235,18 +226,6 @@ public class FloatingWidget : Form
         }
 
         return y + 14;
-    }
-
-    private int MeasureContentHeight()
-    {
-        // header(24) + sep(10) + mcp(46) + gap(8) + token(46) + sep(10) + stats(14) = 158
-        int h = 24 + 10; // header + sep
-        h += 46; // mcp section (label 16 + pct+bar 16 + detail 14)
-        h += 8;  // gap
-        h += 46; // token section
-        h += 10; // sep
-        if (!_snapshot.IsOffline) h += 14; // stats (single line)
-        return h;
     }
 
     #endregion

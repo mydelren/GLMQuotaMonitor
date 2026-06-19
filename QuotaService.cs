@@ -137,14 +137,24 @@ public class QuotaService : IDisposable
             var quotaTask = FetchJson(domain, "/api/monitor/usage/quota/limit", token, ct);
             var usageTask = FetchModelUsage(domain, token, ct);
 
-            // 等待主接口，model-usage 单独处理异常
+            // 等待主接口
             await quotaTask;
             var snapshot = ParseQuotaResponse(quotaTask.Result);
 
-            if (usageTask.IsCompletedSuccessfully)
-                ParseModelUsage(usageTask.Result, snapshot);
-            else if (usageTask.IsFaulted)
-                usageTask.Exception?.Handle(_ => true); // 消除未观察异常警告
+            // model-usage 单独处理，失败不影响主流程
+            try
+            {
+                if (!usageTask.IsCompleted) await usageTask;
+                if (usageTask.Status == TaskStatus.RanToCompletion && usageTask.Result != null)
+                {
+                    ParseModelUsage(usageTask.Result, snapshot);
+                    System.Diagnostics.Debug.WriteLine($"[QuotaService] model-usage parsed: calls={snapshot.CallCount}, tokens={snapshot.TokenUsage}");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"[QuotaService] model-usage failed: {ex.Message}");
+            }
             snapshot.Timestamp = DateTime.Now;
             snapshot.IsOffline = false;
 
@@ -225,16 +235,14 @@ public class QuotaService : IDisposable
 
         foreach (var item in limits.EnumerateArray())
         {
-            // 诊断：记录原始数据
             System.Diagnostics.Debug.WriteLine($"[QuotaService] limit item: {item}");
 
             string type = item.TryGetProperty("type", out var t) ? t.GetString() ?? "" : "";
-
             long total = GetLongAny(item, "usage", "limit_value", "limitValue");
             long used = GetLongAny(item, "currentValue", "used_value", "usedValue");
             long remaining = GetLongAny(item, "remaining", "remaining_value", "remainingValue");
 
-            // 尝试从 percentage 字段直接获取百分比（API 可能直接返回）
+            // 读取 API 直接返回的百分比
             double directPct = -1;
             if (item.TryGetProperty("percentage", out var pctElem))
             {
@@ -261,8 +269,13 @@ public class QuotaService : IDisposable
                     snapshot.McpQuota = quotaItem;
                     break;
                 case "TOKENS_LIMIT":
-                    quotaItem.Name = "5h Token";
-                    snapshot.Token5hQuota = quotaItem;
+                    // API 可能返回多个 TOKENS_LIMIT（unit=3 是 5h 流控，unit=6 是日流控）
+                    // 取第一个（unit=3 的 5h 窗口），如果已有则跳过
+                    if (snapshot.Token5hQuota.Total == 0 && snapshot.Token5hQuota.DirectPercentage < 0)
+                    {
+                        quotaItem.Name = "5h Token";
+                        snapshot.Token5hQuota = quotaItem;
+                    }
                     break;
             }
         }

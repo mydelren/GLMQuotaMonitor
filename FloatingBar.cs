@@ -13,6 +13,8 @@ public class FloatingBar : Form
 {
     private const int BarHeight = 36;
     private const int DefaultBarWidth = 420;
+    private const int MinBarWidth = 200;
+    private const int BarHPadding = 32; // 左右各 16px
     private const int EdgeSnapThreshold = 10;
     private const int AutoHideDelayMs = 500;
     private const int RevealEdgeWidth = 4;
@@ -127,14 +129,13 @@ public class FloatingBar : Form
         int dotSize = 8;
         int dotGap = 12;
 
-        // ── 先测量全部内容宽度，再整体居中 ──
+        // ── 测量内容宽度，自动调整窗口宽度 ──
         Color labelColor2 = isDark ? Color.FromArgb(140, 150, 175) : Color.FromArgb(110, 115, 130);
         Color valueColor = isDark ? Color.FromArgb(224, 228, 235) : Color.FromArgb(35, 35, 45);
         using var labelBrush = new SolidBrush(labelColor2);
         using var valueBrush = new SolidBrush(valueColor);
         using var sepBrush = new SolidBrush(isDark ? Color.FromArgb(80, 90, 115) : Color.FromArgb(180, 180, 190));
 
-        // 预计算各段宽度
         float totalW = dotSize + dotGap;
         totalW += MeasureSegment(g, "MCP", _snapshot.McpQuota.Percentage, cfg, isDark);
         totalW += MeasureSep(g);
@@ -145,7 +146,16 @@ public class FloatingBar : Form
             totalW += g.MeasureString($"{FormatNumber(_snapshot.CallCount)} 次", _valueFont).Width;
         }
 
-        // 居中起始位置
+        // 自动调整窗口宽度（内容 + 左右 padding）
+        int desiredW = Math.Max(MinBarWidth, (int)totalW + BarHPadding);
+        if (Math.Abs(desiredW - w) > 4 && !_isDragging && !_isSnapped)
+        {
+            Width = desiredW;
+            w = desiredW;
+            Invalidate(); // 用新尺寸重绘
+            return;
+        }
+
         float startX = (w - totalW) / 2;
         float cx = startX;
 

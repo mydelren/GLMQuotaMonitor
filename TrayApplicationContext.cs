@@ -162,8 +162,8 @@ public class TrayApplicationContext : ApplicationContext
         btnRefresh.Click += (_, _) => RefreshQuota();
         panel.Controls.Add(btnRefresh);
 
-        var host = new ToolStripControlHost(panel) { AutoSize = false, Size = new Size(pw, ph) };
-        _popup = new ToolStripDropDown { DropShadowEnabled = true, AutoClose = true };
+        var host = new ToolStripControlHost(panel) { AutoSize = false, Size = new Size(pw, ph), Margin = new Padding(0), Padding = new Padding(0) };
+        _popup = new ToolStripDropDown { DropShadowEnabled = true, AutoClose = true, Padding = new Padding(0), Margin = new Padding(0) };
         _popup.Items.Add(host);
 
         var screen = Screen.PrimaryScreen!.WorkingArea;
@@ -290,7 +290,7 @@ public class TrayApplicationContext : ApplicationContext
         if (pct >= config.CriticalThreshold)
             pctColor = Color.FromArgb(255, 118, 117);
         else if (pct >= config.WarningThreshold)
-            pctColor = Color.FromArgb(253, 203, 110);
+            pctColor = Color.FromArgb(255, 220, 100);
         else
             pctColor = isDark ? Color.FromArgb(0, 206, 201) : Color.FromArgb(0, 160, 140);
 

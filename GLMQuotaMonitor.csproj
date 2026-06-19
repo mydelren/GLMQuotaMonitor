@@ -9,9 +9,9 @@
     <!-- <ApplicationIcon>app.ico</ApplicationIcon> -->
     <AssemblyName>GLMQuotaMonitor</AssemblyName>
     <RootNamespace>GLMQuotaMonitor</RootNamespace>
-    <Version>1.0.0</Version>
-    <Authors>kwangao</Authors>
-    <Description>Windows desktop tool for monitoring GLM/Z.ai API usage quotas</Description>
+    <Version>0.1.0</Version>
+    <Authors>mydelren</Authors>
+    <Description>Windows 桌面工具，实时监控智谱 AI / Z.ai API 使用配额</Description>
   </PropertyGroup>
 
 </Project>

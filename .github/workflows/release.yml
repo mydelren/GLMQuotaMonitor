@@ -1,0 +1,81 @@
+name: 构建发布
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - name: 检出代码
+        uses: actions/checkout@v4
+
+      - name: 设置 .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: 构建轻量版（框架依赖）
+        run: >
+          dotnet publish -c Release
+          -r win-x64
+          --self-contained false
+          -p:PublishSingleFile=true
+          -p:EnableCompressionInSingleFile=true
+          -o publish/light
+
+      - name: 构建完整版（自包含）
+        run: >
+          dotnet publish -c Release
+          -r win-x64
+          --self-contained true
+          -p:PublishSingleFile=true
+          -p:IncludeNativeLibrariesForSelfExtract=true
+          -p:EnableCompressionInSingleFile=true
+          -o publish/full
+
+      - name: 重命名产物
+        shell: bash
+        run: |
+          mv publish/light/GLMQuotaMonitor.exe publish/light/GLMQuotaMonitor-light.exe
+          mv publish/full/GLMQuotaMonitor.exe publish/full/GLMQuotaMonitor-full.exe
+
+      - name: 获取版本号
+        id: version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: 创建 Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "GLM 配额监控 ${{ steps.version.outputs.VERSION }}"
+          body: |
+            ## GLM 配额监控 ${{ steps.version.outputs.VERSION }}
+
+            Windows 桌面工具，实时监控智谱 AI / Z.ai API 使用配额。
+
+            ### 下载说明
+
+            | 文件 | 说明 | 体积 |
+            |------|------|------|
+            | `GLMQuotaMonitor-light.exe` | 轻量版（框架依赖） | ~5-15MB |
+            | `GLMQuotaMonitor-full.exe` | 完整版（自包含） | ~60-80MB |
+
+            **轻量版** 需要已安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)。如果不确定，请下载完整版。
+
+            **完整版** 无需任何依赖，下载后直接运行。
+
+            ### 功能
+            - 系统托盘常驻，配额状态一目了然
+            - 浮动卡片：MCP 配额 + 5h Token 实时显示
+            - 贴边吸附：拖到屏幕边缘自动收起为迷你进度条
+            - 深色/浅色主题自动跟随系统
+            - 配额超限自动通知
+          files: |
+            publish/light/GLMQuotaMonitor-light.exe
+            publish/full/GLMQuotaMonitor-full.exe
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

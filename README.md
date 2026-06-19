@@ -33,7 +33,7 @@ Windows 桌面常驻工具，实时监控智谱 AI (GLM) / Z.ai 的 API 使用�
 
 ```bash
 # 克隆仓库
-git clone https://github.com/kwangao/GLMQuotaMonitor.git
+git clone https://github.com/mydelren/GLMQuotaMonitor.git
 cd GLMQuotaMonitor
 
 # 构建

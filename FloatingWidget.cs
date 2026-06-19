@@ -298,7 +298,7 @@ public class FloatingWidget : Form
         if (_detailPanel != null && !_detailPanel.IsDisposed) return;
 
         _detailPanel = new DetailPanel(_themeService, _configService, _snapshot);
-        _detailPanel.MouseEnter += (_, _) => { _hoverHideTimer.Stop(); };
+        _detailPanel.MouseEnter += (_, _) => { _hoverHideTimer.Stop(); _hideTimer.Stop(); };
         _detailPanel.MouseLeave += (_, _) =>
         {
             _hoverHideTimer.Stop();
@@ -316,6 +316,8 @@ public class FloatingWidget : Form
             py = Location.Y - _detailPanel.Height - 4;
         if (px + _detailPanel.Width > screen.Right)
             px = screen.Right - _detailPanel.Width - 10;
+        if (px < screen.Left)
+            px = screen.Left + 10;
 
         _detailPanel.Location = new Point(px, py);
         _detailPanel.Show();
@@ -585,7 +587,7 @@ public class DetailPanel : Form
     {
         if (tokens >= 1_000_000_000) return $"{tokens / 1_000_000_000.0:F1}B";
         if (tokens >= 1_000_000) return $"{tokens / 1_000_000.0:F0}M";
-        if (tokens >= 1_000) return $"{tokens / 1_000.0:F0}M";
+        if (tokens >= 1_000) return $"{tokens / 1_000.0:F0}K";
         return tokens.ToString();
     }
 

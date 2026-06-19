@@ -17,7 +17,7 @@ public class FloatingBar : Form
     private const int RevealEdgeWidth = 4;
 
     private readonly ThemeService _themeService;
-    private readonly AppConfig _config;
+    private readonly ConfigService _configService;
     private readonly System.Windows.Forms.Timer _hideTimer;
     private readonly Action<bool> _themeChangedHandler;
 
@@ -30,10 +30,11 @@ public class FloatingBar : Form
     private DockStyle _snapEdge = DockStyle.None;
     private bool _isExpanded;
 
-    public FloatingBar(ThemeService themeService, AppConfig config)
+    public FloatingBar(ThemeService themeService, ConfigService configService)
     {
         _themeService = themeService;
-        _config = config;
+        _configService = configService;
+        var config = configService.Config;
 
         // 窗口基本设置
         FormBorderStyle = FormBorderStyle.None;
@@ -122,8 +123,9 @@ public class FloatingBar : Form
             g.FillRectangle(brush, ClientRectangle);
         }
 
-        // 状态指示小圆点
-        var status = _snapshot.GetStatus(_config.WarningThreshold, _config.CriticalThreshold);
+        // 状态指示小圆点（每次绘制读取最新配置）
+        var cfg = _configService.Config;
+        var status = _snapshot.GetStatus(cfg.WarningThreshold, cfg.CriticalThreshold);
         Color dotColor = status switch
         {
             QuotaStatus.Normal => Color.FromArgb(0, 180, 0),
@@ -216,6 +218,9 @@ public class FloatingBar : Form
             SnapToEdge(DockStyle.Right, screen);
         else if (loc.Y <= screen.Top + EdgeSnapThreshold)
             SnapToEdge(DockStyle.Top, screen);
+
+        // 保存位置到配置
+        PersistPosition();
     }
 
     private void SnapToEdge(DockStyle edge, Rectangle screen)
@@ -279,6 +284,24 @@ public class FloatingBar : Form
     }
 
     #endregion
+
+    /// <summary>
+    /// 保存当前位置到配置
+    /// </summary>
+    private void PersistPosition()
+    {
+        try
+        {
+            var config = _configService.Config;
+            config.FloatingBarX = Location.X;
+            config.FloatingBarY = Location.Y;
+            _configService.Save(config);
+        }
+        catch
+        {
+            // 保存失败不影响使用
+        }
+    }
 
     /// <summary>
     /// 应用圆角

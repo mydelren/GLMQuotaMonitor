@@ -228,7 +228,7 @@ public class TrayApplicationContext : ApplicationContext
     {
         if (_floatingBar != null) return;
 
-        _floatingBar = new FloatingWidget(_themeService, _configService);
+        _floatingBar = new FloatingWidget(_themeService, _configService, RefreshQuota);
         _floatingBar.UpdateData(_quotaService.GetLastSnapshot());
         _floatingBar.Show();
     }

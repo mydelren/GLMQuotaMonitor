@@ -7,19 +7,22 @@ namespace GLMQuotaMonitor;
 /// <summary>
 /// 浮动配额卡片 Widget
 /// 三列布局：标签 | 进度条 | 百分比，每区一行，紧凑居中
+/// 底部：刷新按钮 + 更新时间
 /// </summary>
 public class FloatingWidget : Form
 {
     private const int CardWidth = 240;
-    private const int CardHeight = 106;
+    private const int CardHeight = 130;
     private const int CardHPadding = 20;
     private const int CardVPadding = 14;
+    private const int Inset = 2;
 
-    private const int LabelColWidth = 60;
-    private const int BarWidth = 80;
-    private const int BarHeight = 10;
+    private const int LabelColWidth = 70;
+    private const int BarWidth = 70;
+    private const int BarHeight = 14;
     private const int PctColWidth = 50;
     private const int ColGap = 5;
+    private const int RowHeight = 24;
 
     private const int EdgeSnapThreshold = 10;
     private const int RevealEdgeWidth = 4;
@@ -27,6 +30,7 @@ public class FloatingWidget : Form
 
     private readonly ThemeService _themeService;
     private readonly ConfigService _configService;
+    private readonly Action _onRefresh;
     private readonly System.Windows.Forms.Timer _hideTimer;
     private readonly Action<bool> _themeChangedHandler;
 
@@ -36,16 +40,19 @@ public class FloatingWidget : Form
     private bool _isSnapped;
     private DockStyle _snapEdge = DockStyle.None;
     private bool _isExpanded;
+    private Rectangle _refreshBtnRect;
 
     // 缓存字体
     private readonly Font _labelFont = new("Segoe UI", 9f);
     private readonly Font _valueFont = new("Segoe UI", 11f, FontStyle.Bold);
     private readonly Font _detailFont = new("Segoe UI", 8f);
+    private readonly Font _refreshFont = new("Segoe UI", 8.5f);
 
-    public FloatingWidget(ThemeService themeService, ConfigService configService)
+    public FloatingWidget(ThemeService themeService, ConfigService configService, Action onRefresh)
     {
         _themeService = themeService;
         _configService = configService;
+        _onRefresh = onRefresh;
         var config = configService.Config;
 
         FormBorderStyle = FormBorderStyle.None;
@@ -102,16 +109,16 @@ public class FloatingWidget : Form
         var cfg = _configService.Config;
         int w = Width, h = Height;
 
-        // 背景
+        // 背景（内缩 2px，避免 TransparencyKey 抗锯齿问题）
         Color bg = isDark ? Color.FromArgb(235, 18, 24, 42) : Color.FromArgb(245, 248, 252);
         using (var bgBrush = new SolidBrush(bg))
-        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w, h, 4))
+        using (var path = GraphicsExtensions.MakeRoundRect(Inset, Inset, w - Inset * 2, h - Inset * 2, 4))
             g.FillPath(bgBrush, path);
 
         // 边框
         Color border = isDark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(30, 0, 0, 0);
         using (var borderPen = new Pen(border))
-        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w - 1, h - 1, 4))
+        using (var path = GraphicsExtensions.MakeRoundRect(Inset, Inset, w - Inset * 2 - 1, h - Inset * 2 - 1, 4))
             g.DrawPath(borderPen, path);
 
         int x = CardHPadding;
@@ -120,22 +127,11 @@ public class FloatingWidget : Form
 
         // ═══ MCP 配额 ═══
         y = DrawQuotaRow(g, _snapshot.McpQuota, cfg, isDark, x, y);
-        y += 6;
-
-        // ═══ 分隔线 ═══
-        Color sepColor = isDark ? Color.FromArgb(20, 255, 255, 255) : Color.FromArgb(15, 0, 0, 0);
-        using (var sepPen = new Pen(sepColor))
-            g.DrawLine(sepPen, x, y, x + cw, y);
-        y += 6;
+        y += 8;
 
         // ═══ 5h Token ═══
         y = DrawQuotaRow(g, _snapshot.Token5hQuota, cfg, isDark, x, y);
-        y += 6;
-
-        // ═══ 分隔线 ═══
-        using (var sepPen = new Pen(sepColor))
-            g.DrawLine(sepPen, x, y, x + cw, y);
-        y += 6;
+        y += 10;
 
         // ═══ 统计行（居中）═══
         if (!_snapshot.IsOffline)
@@ -147,6 +143,23 @@ public class FloatingWidget : Form
             float statsX = (w - textSize.Width) / 2;
             g.DrawString(line, _detailFont, statBrush, statsX, y);
         }
+        y += 16;
+
+        // ═══ 刷新行 ═══
+        // 左侧：刷新按钮
+        Color refreshColor = isDark ? Color.FromArgb(123, 140, 222) : Color.FromArgb(60, 80, 180);
+        using var refreshBrush = new SolidBrush(refreshColor);
+        string refreshText = "⟳ 刷新";
+        g.DrawString(refreshText, _refreshFont, refreshBrush, x, y);
+        var refreshSize = g.MeasureString(refreshText, _refreshFont);
+        _refreshBtnRect = new Rectangle(x, y, (int)refreshSize.Width + 4, (int)refreshSize.Height + 2);
+
+        // 右侧：更新时间
+        Color timeColor = isDark ? Color.FromArgb(80, 90, 115) : Color.FromArgb(140, 140, 160);
+        using var timeBrush = new SolidBrush(timeColor);
+        string timeText = _snapshot.IsOffline ? "离线" : $"{_snapshot.Timestamp:HH:mm:ss} 更新";
+        var timeSize = g.MeasureString(timeText, _detailFont);
+        g.DrawString(timeText, _detailFont, timeBrush, x + cw - timeSize.Width, y + 1);
     }
 
     /// <summary>
@@ -155,7 +168,6 @@ public class FloatingWidget : Form
     private int DrawQuotaRow(Graphics g, QuotaItem item, AppConfig config, bool isDark, int x, int y)
     {
         double pct = Math.Clamp(item.Percentage, 0, 100);
-        int rowHeight = 20;
 
         // 列 X 位置
         int labelX = x;
@@ -165,20 +177,27 @@ public class FloatingWidget : Form
         // ── 标签（左列，垂直居中）──
         Color labelColor = isDark ? Color.FromArgb(120, 130, 160) : Color.FromArgb(100, 100, 120);
         using var labelBrush = new SolidBrush(labelColor);
-        float labelY = y + (rowHeight - _labelFont.GetHeight(g)) / 2;
+        float labelY = y + (RowHeight - _labelFont.GetHeight(g)) / 2;
         g.DrawString(item.Name, _labelFont, labelBrush, labelX, labelY);
 
         // ── 进度条（中列，垂直居中）──
-        int barY = y + (rowHeight - BarHeight) / 2;
+        int barY = y + (RowHeight - BarHeight) / 2;
 
-        Color barBg = isDark ? Color.FromArgb(25, 255, 255, 255) : Color.FromArgb(15, 0, 0, 0);
+        Color barBg = isDark ? Color.FromArgb(40, 255, 255, 255) : Color.FromArgb(25, 0, 0, 0);
         using (var bgBrush = new SolidBrush(barBg))
             g.FillRectangle(bgBrush, barX, barY, BarWidth, BarHeight);
+
+        // 进度条颜色：MCP 蓝色，5h 青色，超限统一黄/红
+        Color normalColor;
+        if (item.Type == "TIME_LIMIT")
+            normalColor = isDark ? Color.FromArgb(70, 130, 230) : Color.FromArgb(50, 100, 200);
+        else
+            normalColor = isDark ? Color.FromArgb(0, 210, 205) : Color.FromArgb(0, 160, 140);
 
         Color pctColor;
         if (pct >= config.CriticalThreshold) pctColor = Color.FromArgb(255, 118, 117);
         else if (pct >= config.WarningThreshold) pctColor = Color.FromArgb(255, 220, 100);
-        else pctColor = isDark ? Color.FromArgb(0, 210, 205) : Color.FromArgb(0, 160, 140);
+        else pctColor = normalColor;
 
         int fillW = (int)(BarWidth * pct / 100);
         if (fillW > 0)
@@ -192,19 +211,27 @@ public class FloatingWidget : Form
         string pctText = $"{pct:F0}%";
         var pctSize = g.MeasureString(pctText, _valueFont);
         float pctDrawX = pctX + PctColWidth - pctSize.Width;
-        float pctDrawY = y + (rowHeight - pctSize.Height) / 2;
+        float pctDrawY = y + (RowHeight - pctSize.Height) / 2;
         g.DrawString(pctText, _valueFont, pctBrush, pctDrawX, pctDrawY);
 
-        return y + rowHeight;
+        return y + RowHeight;
     }
 
     #endregion
 
-    #region 拖动 & 贴边
+    #region 鼠标事件
 
     private void OnMouseDown(object? sender, MouseEventArgs e)
     {
         if (e.Button != MouseButtons.Left) return;
+
+        // 刷新按钮命中检测
+        if (_refreshBtnRect.Contains(e.Location))
+        {
+            _onRefresh?.Invoke();
+            return;
+        }
+
         _isDragging = true;
         _dragOffset = e.Location;
         if (_isSnapped)
@@ -237,6 +264,10 @@ public class FloatingWidget : Form
 
         PersistPosition();
     }
+
+    #endregion
+
+    #region 贴边吸附
 
     private void SnapToEdge(DockStyle edge, Rectangle screen)
     {
@@ -322,6 +353,7 @@ public class FloatingWidget : Form
             _labelFont.Dispose();
             _valueFont.Dispose();
             _detailFont.Dispose();
+            _refreshFont.Dispose();
         }
         base.Dispose(disposing);
     }

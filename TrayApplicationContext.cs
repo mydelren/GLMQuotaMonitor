@@ -120,95 +120,31 @@ public class TrayApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// 显示配额详情弹窗
+    /// 显示配额详情弹窗（自绘面板，匹配 HTML demo 风格）
     /// </summary>
     private void ShowPopup()
     {
-        // 如果已有弹窗且可见，关闭（切换行为）
         if (_popup?.Visible == true)
         {
             _popup.Close();
             return;
         }
 
-        // 释放之前关闭的弹窗资源
         _popup?.Dispose();
         _popup = null;
 
         var snapshot = _quotaService.GetLastSnapshot();
         bool isDark = _themeService.IsDark;
+        var config = _configService.Config;
 
-        int panelWidth = 340;
-        int panelHeight = 210;
+        int pw = 340, ph = 230;
 
-        var panel = CreatePopupPanel(snapshot, isDark, panelWidth, panelHeight);
+        // 全自绘面板
+        var panel = new Panel { Size = new Size(pw, ph), BackColor = Color.Transparent };
+        var snapshotRef = snapshot;
+        panel.Paint += (_, e) => PaintPopup(e.Graphics, snapshotRef, isDark, config, pw, ph);
 
-        var host = new ToolStripControlHost(panel)
-        {
-            AutoSize = false,
-            Size = new Size(panelWidth, panelHeight)
-        };
-
-        _popup = new ToolStripDropDown
-        {
-            DropShadowEnabled = true,
-            AutoClose = true
-        };
-        _popup.Items.Add(host);
-
-        // 定位到屏幕右下角（在任务栏上方）
-        var screen = Screen.PrimaryScreen!.WorkingArea;
-        _popup.Show(screen.Right - panelWidth - 10, screen.Bottom - panelHeight - 10);
-    }
-
-    /// <summary>
-    /// 创建弹窗面板（固定尺寸，不用 AutoSize）
-    /// </summary>
-    private Panel CreatePopupPanel(QuotaSnapshot snapshot, bool isDark, int width, int height)
-    {
-        Color bgColor = isDark ? Color.FromArgb(22, 33, 62) : Color.FromArgb(245, 245, 250);
-        Color textColor = isDark ? Color.FromArgb(224, 224, 224) : Color.FromArgb(30, 30, 30);
-        Color subTextColor = isDark ? Color.FromArgb(123, 140, 176) : Color.FromArgb(100, 100, 100);
-        Color separatorColor = isDark ? Color.FromArgb(30, 42, 74) : Color.FromArgb(220, 220, 230);
-
-        var panel = new Panel
-        {
-            BackColor = bgColor,
-            Size = new Size(width, height)
-        };
-
-        int contentWidth = width - 32; // 左右各 16px padding
-        int y = 12;
-
-        // 标题行
-        var lblTitle = CreateLabel("GLM 配额监控", 14, FontStyle.Bold, textColor, 16, y);
-        panel.Controls.Add(lblTitle);
-        y += 32;
-
-        // 分隔线
-        panel.Controls.Add(CreateSeparator(separatorColor, 16, y, contentWidth));
-        y += 12;
-
-        // MCP 配额
-        y = AddQuotaRow(panel, snapshot.McpQuota, isDark, 16, y, contentWidth, _configService.Config);
-        y += 8;
-
-        // 5h Token
-        y = AddQuotaRow(panel, snapshot.Token5hQuota, isDark, 16, y, contentWidth, _configService.Config);
-        y += 12;
-
-        // 分隔线
-        panel.Controls.Add(CreateSeparator(separatorColor, 16, y, contentWidth));
-        y += 12;
-
-        // 时间戳
-        string timeStr = snapshot.IsOffline
-            ? "离线 - 显示上次数据"
-            : $"🕐 上次刷新: {snapshot.Timestamp:HH:mm:ss}";
-        var lblTime = CreateLabel(timeStr, 9, FontStyle.Regular, subTextColor, 16, y);
-        panel.Controls.Add(lblTime);
-
-        // 刷新按钮（右下角）
+        // 刷新按钮（叠加在面板上）
         var btnRefresh = new Button
         {
             Text = "⟳ 刷新",
@@ -216,46 +152,151 @@ public class TrayApplicationContext : ApplicationContext
             ForeColor = isDark ? Color.FromArgb(123, 140, 222) : Color.FromArgb(60, 80, 180),
             BackColor = Color.Transparent,
             Font = new Font("Microsoft YaHei UI", 9f),
-            Location = new Point(width - 90, height - 34),
-            Size = new Size(74, 24),
-            Cursor = Cursors.Hand
+            Location = new Point(pw - 80, ph - 32),
+            Size = new Size(68, 22),
+            Cursor = Cursors.Hand,
+            TabStop = false
         };
+        btnRefresh.FlatAppearance.BorderSize = 0;
         btnRefresh.Click += (_, _) => RefreshQuota();
         panel.Controls.Add(btnRefresh);
 
-        return panel;
+        var host = new ToolStripControlHost(panel) { AutoSize = false, Size = new Size(pw, ph) };
+        _popup = new ToolStripDropDown { DropShadowEnabled = true, AutoClose = true };
+        _popup.Items.Add(host);
+
+        var screen = Screen.PrimaryScreen!.WorkingArea;
+        _popup.Show(screen.Right - pw - 10, screen.Bottom - ph - 10);
     }
 
     /// <summary>
-    /// 添加一行配额信息到面板
-    /// 布局：[名称 60px] [进度条 flex] [百分比 48px]
+    /// 全自绘弹窗（匹配 HTML demo：深蓝底、圆角进度条、统计数据行）
     /// </summary>
-    private static int AddQuotaRow(Panel panel, QuotaItem item, bool isDark, int x, int y, int contentWidth, AppConfig config)
+    private void PaintPopup(Graphics g, QuotaSnapshot s, bool isDark, AppConfig config, int w, int h)
     {
-        // 名称标签
-        var lbl = CreateLabel(item.Name, 10, FontStyle.Regular,
-            isDark ? Color.FromArgb(136, 146, 176) : Color.FromArgb(100, 100, 100),
-            x, y + 2);
-        panel.Controls.Add(lbl);
+        g.SmoothingMode = SmoothingMode.AntiAlias;
+        g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
+
+        // 背景色
+        Color bgHeader = isDark ? Color.FromArgb(15, 52, 96) : Color.FromArgb(230, 235, 245);
+        Color bgBody = isDark ? Color.FromArgb(22, 33, 62) : Color.FromArgb(245, 245, 250);
+        Color bgFooter = isDark ? Color.FromArgb(0, 0, 0, 40) : Color.FromArgb(0, 0, 0, 10);
+        Color cText = isDark ? Color.FromArgb(224, 224, 224) : Color.FromArgb(30, 30, 30);
+        Color cSub = isDark ? Color.FromArgb(123, 140, 176) : Color.FromArgb(100, 100, 100);
+        Color cSep = isDark ? Color.FromArgb(30, 42, 74) : Color.FromArgb(220, 220, 230);
+        Color cBarBg = isDark ? Color.FromArgb(26, 26, 62) : Color.FromArgb(230, 230, 235);
+
+        // 圆角背景
+        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w, h, 10))
+        {
+            using var bgBrush = new SolidBrush(bgBody);
+            g.FillPath(bgBrush, path);
+        }
+
+        int pad = 16;
+        int cw = w - pad * 2;
+        float y = pad;
+
+        // ── Header ──
+        using (var headerBrush = new SolidBrush(bgHeader))
+            g.FillRectangle(headerBrush, 0, 0, w, 48);
+
+        // Logo
+        using var logoBrush = new SolidBrush(Color.FromArgb(0, 180, 228));
+        g.FillRoundedRectangle(logoBrush, pad, 12, 24, 24, 6);
+        using var logoFont = new Font("Segoe UI", 12f, FontStyle.Bold);
+        using var whiteBrush = new SolidBrush(Color.White);
+        var logoSize = g.MeasureString("G", logoFont);
+        g.DrawString("G", logoFont, whiteBrush, pad + (24 - logoSize.Width) / 2, 12 + (24 - logoSize.Height) / 2);
+
+        // 标题
+        using var titleFont = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold);
+        g.DrawString("GLM 配额监控", titleFont, new SolidBrush(cText), pad + 30, 14);
+
+        // 平台标签
+        string platform = DetectPlatformName();
+        using var platFont = new Font("Microsoft YaHei UI", 8.5f);
+        var platSize = g.MeasureString(platform, platFont);
+        int platW = (int)platSize.Width + 14;
+        int platX = w - pad - platW;
+        using var platBg = new SolidBrush(Color.FromArgb(30, 123, 140, 222));
+        g.FillRoundedRectangle(platBg, platX, 15, platW, 20, 10);
+        using var platFg = new SolidBrush(Color.FromArgb(123, 140, 222));
+        g.DrawString(platform, platFont, platFg, platX + 7, 16);
+
+        y = 54;
+
+        // ── 分隔线 ──
+        using var sepPen = new Pen(cSep);
+        g.DrawLine(sepPen, pad, y, w - pad, y);
+        y += 10;
+
+        // ── MCP 配额行 ──
+        y = PaintQuotaRow(g, s.McpQuota, isDark, config, pad, y, cw, cSub, cBarBg);
+        y += 8;
+
+        // ── 5h Token 行 ──
+        y = PaintQuotaRow(g, s.Token5hQuota, isDark, config, pad, y, cw, cSub, cBarBg);
+        y += 10;
+
+        // ── 分隔线 ──
+        g.DrawLine(sepPen, pad, y, w - pad, y);
+        y += 10;
+
+        // ── 统计行（调用次数 | Token用量） ──
+        if (!s.IsOffline)
+        {
+            using var statFont = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
+            using var statSub = new Font("Microsoft YaHei UI", 8f);
+            using var statFg = new SolidBrush(cText);
+            using var statSubFg = new SolidBrush(cSub);
+
+            int colW = cw / 3;
+            // 调用次数
+            g.DrawString(FormatNumber(s.CallCount), statFont, statFg, pad, y);
+            g.DrawString("调用次数", statSub, statSubFg, pad, y + 18);
+            // Token 用量
+            g.DrawString(FormatTokenUsage(s.TokenUsage), statFont, statFg, pad + colW, y);
+            g.DrawString("Token 用量", statSub, statSubFg, pad + colW, y + 18);
+        }
+        y += 40;
+
+        // ── Footer ──
+        using (var footerBrush = new SolidBrush(bgFooter))
+            g.FillRectangle(footerBrush, 0, h - 36, w, 36);
+        g.DrawLine(sepPen, 0, h - 36, w, h - 36);
+
+        string timeStr = s.IsOffline ? "离线" : $"🕐 {s.Timestamp:HH:mm:ss}";
+        using var timeFont = new Font("Microsoft YaHei UI", 8.5f);
+        g.DrawString(timeStr, timeFont, new SolidBrush(cSub), pad, h - 28);
+    }
+
+    /// <summary>
+    /// 绘制单行配额（标签 + 进度条 + 百分比 + 用量文字）
+    /// </summary>
+    private static float PaintQuotaRow(Graphics g, QuotaItem item, bool isDark, AppConfig config,
+        int x, float y, int cw, Color cSub, Color cBarBg)
+    {
+        // 标签
+        using var labelFont = new Font("Microsoft YaHei UI", 9.5f);
+        g.DrawString(item.Name, labelFont, new SolidBrush(cSub), x, y);
 
         // 进度条
-        int barX = x + 64;
-        int pctLabelWidth = 48;
-        int barWidth = contentWidth - 64 - pctLabelWidth - 8;
-        int barHeight = 10;
-        int barY = y + 2;
+        int barX = x + 70;
+        int pctW = 46;
+        int barW = cw - 70 - pctW - 4;
+        int barH = 8;
+        float barY = y + 4;
 
-        var barPanel = new Panel
-        {
-            Location = new Point(barX, barY),
-            Size = new Size(barWidth, barHeight),
-            BackColor = isDark ? Color.FromArgb(26, 26, 62) : Color.FromArgb(230, 230, 235)
-        };
-        barPanel.Paint += (_, e) =>
-        {
-            double pct = Math.Clamp(item.Percentage, 0, 100);
-            int fillWidth = (int)(barWidth * pct / 100);
+        // 进度条背景
+        using (var bgBrush = new SolidBrush(cBarBg))
+            g.FillRoundedRectangle(bgBrush, barX, barY, barW, barH, 4);
 
+        // 进度条填充
+        double pct = Math.Clamp(item.Percentage, 0, 100);
+        int fillW = (int)(barW * pct / 100);
+        if (fillW > 0)
+        {
             Color barColor;
             if (pct >= config.CriticalThreshold)
                 barColor = isDark ? Color.FromArgb(214, 48, 49) : Color.FromArgb(200, 0, 0);
@@ -264,50 +305,46 @@ public class TrayApplicationContext : ApplicationContext
             else
                 barColor = isDark ? Color.FromArgb(0, 206, 201) : Color.FromArgb(0, 160, 140);
 
-            using var brush = new SolidBrush(barColor);
-            e.Graphics.SmoothingMode = SmoothingMode.AntiAlias;
-            e.Graphics.FillRectangle(brush, 0, 0, fillWidth, barHeight);
-        };
-        panel.Controls.Add(barPanel);
+            using var fillBrush = new LinearGradientBrush(
+                new Point(barX, 0), new Point(barX + fillW, 0),
+                ControlPaint.Light(barColor), barColor);
+            g.FillRoundedRectangle(fillBrush, barX, barY, fillW, barH, 4);
+        }
 
         // 百分比
-        double pctValue = item.Percentage;
         Color pctColor;
-        if (pctValue >= config.CriticalThreshold)
+        if (pct >= config.CriticalThreshold)
             pctColor = Color.FromArgb(255, 118, 117);
-        else if (pctValue >= config.WarningThreshold)
+        else if (pct >= config.WarningThreshold)
             pctColor = Color.FromArgb(253, 203, 110);
         else
             pctColor = isDark ? Color.FromArgb(0, 206, 201) : Color.FromArgb(0, 160, 140);
 
-        int pctX = barX + barWidth + 8;
-        var lblPct = CreateLabel($"{pctValue:F0}%", 11, FontStyle.Bold, pctColor, pctX, y);
-        panel.Controls.Add(lblPct);
+        using var pctFont = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
+        g.DrawString($"{pct:F0}%", pctFont, new SolidBrush(pctColor), barX + barW + 6, y - 1);
 
-        return y + 26;
+        // 用量文字（下一行小字）
+        string usageText = $"{FormatNumber(item.Used)} / {FormatNumber(item.Total)}";
+        using var usageFont = new Font("Microsoft YaHei UI", 8f);
+        g.DrawString(usageText, usageFont, new SolidBrush(cSub), barX, y + 14);
+
+        return y + 28;
     }
 
-    private static Label CreateLabel(string text, float fontSize, FontStyle style, Color color, int x, int y)
+    private string DetectPlatformName()
     {
-        return new Label
-        {
-            Text = text,
-            Font = new Font("Microsoft YaHei UI", fontSize, style),
-            ForeColor = color,
-            BackColor = Color.Transparent,
-            Location = new Point(x, y),
-            AutoSize = true
-        };
+        string baseUrl = _configService.Config.GetBaseUrl();
+        if (baseUrl.Contains("z.ai")) return "Z.ai";
+        if (baseUrl.Contains("dev.bigmodel")) return "智谱 (dev)";
+        return "智谱 AI";
     }
 
-    private static Panel CreateSeparator(Color color, int x, int y, int width)
+    private static string FormatTokenUsage(long tokens)
     {
-        return new Panel
-        {
-            BackColor = color,
-            Location = new Point(x, y),
-            Size = new Size(width, 1)
-        };
+        if (tokens >= 1_000_000_000) return $"{tokens / 1_000_000_000.0:F1}B";
+        if (tokens >= 1_000_000) return $"{tokens / 1_000_000.0:F0}M";
+        if (tokens >= 1_000) return $"{tokens / 1_000.0:F0}K";
+        return tokens.ToString();
     }
 
     /// <summary>

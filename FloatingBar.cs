@@ -103,7 +103,7 @@ public class FloatingBar : Form
     }
 
     /// <summary>
-    /// 绘制浮动条内容
+    /// 绘制浮动条内容（圆角背景 + 状态圆点 + 居中文字）
     /// </summary>
     private void OnPaint(object? sender, PaintEventArgs e)
     {
@@ -112,18 +112,17 @@ public class FloatingBar : Form
         g.TextRenderingHint = System.Drawing.Text.TextRenderingHint.ClearTypeGridFit;
 
         bool isDark = _themeService.IsDark;
+        int w = Width, h = Height;
 
-        // 背景
+        // 圆角背景
         Color bgColor = isDark
             ? Color.FromArgb(220, 22, 33, 62)
             : Color.FromArgb(240, 245, 245, 250);
-
+        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w, h, 8))
         using (var brush = new SolidBrush(bgColor))
-        {
-            g.FillRectangle(brush, ClientRectangle);
-        }
+            g.FillPath(brush, path);
 
-        // 状态指示小圆点（每次绘制读取最新配置）
+        // 状态指示小圆点（左侧）
         var cfg = _configService.Config;
         var status = _snapshot.GetStatus(cfg.WarningThreshold, cfg.CriticalThreshold);
         Color dotColor = status switch
@@ -133,20 +132,23 @@ public class FloatingBar : Form
             QuotaStatus.Critical => Color.FromArgb(200, 0, 0),
             _ => Color.FromArgb(128, 128, 128)
         };
+        int dotSize = 8;
+        int dotX = 12;
+        int dotY = (h - dotSize) / 2;
         using (var dotBrush = new SolidBrush(dotColor))
-        {
-            g.FillEllipse(dotBrush, 10, Height / 2 - 4, 8, 8);
-        }
+            g.FillEllipse(dotBrush, dotX, dotY, dotSize, dotSize);
 
-        // 文字
+        // 文字（圆点右侧，整体居中）
         string text = FormatBarText();
         Color textColor = isDark ? Color.FromArgb(224, 224, 224) : Color.FromArgb(30, 30, 30);
         using var font = new Font("Microsoft YaHei UI", 9.5f, FontStyle.Bold);
         using var textBrush = new SolidBrush(textColor);
 
         var textSize = g.MeasureString(text, font);
-        float tx = 24; // 圆点右侧
-        float ty = (Height - textSize.Height) / 2;
+        int textAreaX = dotX + dotSize + 8;
+        int textAreaW = w - textAreaX - 8;
+        float tx = textAreaX + (textAreaW - textSize.Width) / 2;
+        float ty = (h - textSize.Height) / 2;
         g.DrawString(text, font, textBrush, tx, ty);
     }
 
@@ -309,14 +311,7 @@ public class FloatingBar : Form
     private void ApplyRoundedCorners()
     {
         var oldRegion = Region;
-        using var path = new GraphicsPath();
-        int radius = 8;
-        path.AddArc(0, 0, radius * 2, radius * 2, 180, 90);
-        path.AddArc(Width - radius * 2, 0, radius * 2, radius * 2, 270, 90);
-        path.AddArc(Width - radius * 2, Height - radius * 2, radius * 2, radius * 2, 0, 90);
-        path.AddArc(0, Height - radius * 2, radius * 2, radius * 2, 90, 90);
-        path.CloseFigure();
-        Region = new Region(path);
+        Region = new Region(GraphicsExtensions.MakeRoundRect(0, 0, Width, Height, 8));
         oldRegion?.Dispose();
     }
 

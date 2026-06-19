@@ -13,10 +13,9 @@ namespace GLMQuotaMonitor;
 public class FloatingWidget : Form
 {
     private const int CardWidth = 240;
-    private const int CardHeight = 134;
+    private const int CardHeight = 138;
     private const int CardHPadding = 20;
     private const int CardVPadding = 14;
-    private const int Inset = 2;
 
     private const int LabelColWidth = 70;
     private const int BarWidth = 65;
@@ -75,8 +74,7 @@ public class FloatingWidget : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        BackColor = Color.Magenta;
-        TransparencyKey = Color.Magenta;
+        BackColor = Color.FromArgb(30, 30, 46); // Mocha Base, updated per-frame in OnPaint
 
         Size = new Size(CardWidth, CardHeight);
 
@@ -157,14 +155,17 @@ public class FloatingWidget : Form
         Color statColor = isDark ? Color.FromArgb(127, 132, 156) : Color.FromArgb(140, 143, 161);
         Color footerColor = isDark ? Color.FromArgb(88, 91, 112) : Color.FromArgb(156, 160, 176);
 
-        // 背景（内缩 2px）
+        // 同步 BackColor（用于窗口方角区域，与背景色一致）
+        if (BackColor != bg) BackColor = bg;
+
+        // 背景
         using (var bgBrush = new SolidBrush(bg))
-        using (var path = GraphicsExtensions.MakeRoundRect(Inset, Inset, w - Inset * 2, h - Inset * 2, 4))
+        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w, h, 4))
             g.FillPath(bgBrush, path);
 
         // 边框
         using (var borderPen = new Pen(borderColor))
-        using (var path = GraphicsExtensions.MakeRoundRect(Inset, Inset, w - Inset * 2 - 1, h - Inset * 2 - 1, 4))
+        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w - 1, h - 1, 4))
             g.DrawPath(borderPen, path);
 
         int x = CardHPadding;
@@ -193,7 +194,7 @@ public class FloatingWidget : Form
             float statsX = (w - textSize.Width) / 2;
             g.DrawString(line, _detailFont, statBrush, statsX, y);
         }
-        y += 12;
+        y += 16;
 
         // ═══ 分隔线 ═══
         using (var linePen = new Pen(lineColor))

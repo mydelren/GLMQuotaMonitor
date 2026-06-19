@@ -211,7 +211,8 @@ public class TrayApplicationContext : ApplicationContext
 
         // 标题
         using var titleFont = new Font("Microsoft YaHei UI", 13f, FontStyle.Bold);
-        g.DrawString("GLM 配额监控", titleFont, new SolidBrush(cText), pad + 30, 14);
+        using var titleBrush = new SolidBrush(cText);
+        g.DrawString("GLM 配额监控", titleFont, titleBrush, pad + 30, 14);
 
         // 平台标签
         string platform = DetectPlatformName();
@@ -268,7 +269,8 @@ public class TrayApplicationContext : ApplicationContext
 
         string timeStr = s.IsOffline ? "离线" : $"🕐 {s.Timestamp:HH:mm:ss}";
         using var timeFont = new Font("Microsoft YaHei UI", 8.5f);
-        g.DrawString(timeStr, timeFont, new SolidBrush(cSub), pad, h - 28);
+        using var timeBrush = new SolidBrush(cSub);
+        g.DrawString(timeStr, timeFont, timeBrush, pad, h - 28);
     }
 
     /// <summary>
@@ -279,7 +281,8 @@ public class TrayApplicationContext : ApplicationContext
     {
         // 标签
         using var labelFont = new Font("Microsoft YaHei UI", 9.5f);
-        g.DrawString(item.Name, labelFont, new SolidBrush(cSub), x, y);
+        using var labelBrush = new SolidBrush(cSub);
+        g.DrawString(item.Name, labelFont, labelBrush, x, y);
 
         // 进度条
         int barX = x + 70;
@@ -321,12 +324,14 @@ public class TrayApplicationContext : ApplicationContext
             pctColor = isDark ? Color.FromArgb(0, 206, 201) : Color.FromArgb(0, 160, 140);
 
         using var pctFont = new Font("Microsoft YaHei UI", 10f, FontStyle.Bold);
-        g.DrawString($"{pct:F0}%", pctFont, new SolidBrush(pctColor), barX + barW + 6, y - 1);
+        using var pctBrush = new SolidBrush(pctColor);
+        g.DrawString($"{pct:F0}%", pctFont, pctBrush, barX + barW + 6, y - 1);
 
         // 用量文字（下一行小字）
         string usageText = $"{FormatNumber(item.Used)} / {FormatNumber(item.Total)}";
         using var usageFont = new Font("Microsoft YaHei UI", 8f);
-        g.DrawString(usageText, usageFont, new SolidBrush(cSub), barX, y + 14);
+        using var usageBrush = new SolidBrush(cSub);
+        g.DrawString(usageText, usageFont, usageBrush, barX, y + 14);
 
         return y + 28;
     }

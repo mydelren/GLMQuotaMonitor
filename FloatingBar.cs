@@ -311,7 +311,8 @@ public class FloatingBar : Form
     private void ApplyRoundedCorners()
     {
         var oldRegion = Region;
-        Region = new Region(GraphicsExtensions.MakeRoundRect(0, 0, Width, Height, 8));
+        using var path = GraphicsExtensions.MakeRoundRect(0, 0, Width, Height, 8);
+        Region = new Region(path);
         oldRegion?.Dispose();
     }
 

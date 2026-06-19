@@ -10,7 +10,7 @@ namespace GLMQuotaMonitor;
 /// </summary>
 public class FloatingWidget : Form
 {
-    private const int CardWidth = 200;
+    private const int CardWidth = 240;
     private const int CardHPadding = 24;
     private const int CardVPadding = 16;
     private const int EdgeSnapThreshold = 10;
@@ -50,8 +50,8 @@ public class FloatingWidget : Form
         BackColor = Color.Magenta;
         TransparencyKey = Color.Magenta;
 
-        // 固定尺寸（header 24 + sep 10 + mcp 46 + gap 8 + token 46 + sep 10 + stats 14 = 158 + padding 32 = 190）
-        Size = new Size(CardWidth, 190);
+        // 固定尺寸：留足呼吸空间
+        Size = new Size(CardWidth, 240);
 
         // 初始位置
         if (config.FloatingBarX.HasValue && config.FloatingBarY.HasValue)
@@ -136,26 +136,26 @@ public class FloatingWidget : Form
         using var headerBrush = new SolidBrush(headerColor);
         g.DrawString("GLM 配额", _headerFont, headerBrush, x + 12, y);
 
-        y += 24;
+        y += 28;
 
         // ═══ 分隔线 ═══
         Color sepColor = isDark ? Color.FromArgb(25, 255, 255, 255) : Color.FromArgb(20, 0, 0, 0);
         using (var sepPen = new Pen(sepColor))
             g.DrawLine(sepPen, x, y, x + cw, y);
-        y += 10;
+        y += 14;
 
         // ═══ MCP 配额 ═══
         y = DrawQuotaSection(g, _snapshot.McpQuota, cfg, isDark, x, y, cw);
-        y += 8;
+        y += 12;
 
         // ═══ 5h Token ═══
         y = DrawQuotaSection(g, _snapshot.Token5hQuota, cfg, isDark, x, y, cw);
-        y += 10;
+        y += 14;
 
         // ═══ 分隔线 ═══
         using (var sepPen = new Pen(sepColor))
             g.DrawLine(sepPen, x, y, x + cw, y);
-        y += 10;
+        y += 14;
 
         // ═══ 统计行（数字+单位一体，避免压占）═══
         if (!_snapshot.IsOffline)
@@ -179,7 +179,7 @@ public class FloatingWidget : Form
         Color labelColor = isDark ? Color.FromArgb(120, 130, 160) : Color.FromArgb(100, 100, 120);
         using var labelBrush = new SolidBrush(labelColor);
         g.DrawString(item.Name, _labelFont, labelBrush, x, y);
-        y += 16;
+        y += 20;
 
         // ── 第二行：百分比（左）+ 进度条（右）──
         Color pctColor;
@@ -191,11 +191,11 @@ public class FloatingWidget : Form
         string pctText = $"{pct:F0}%";
         g.DrawString(pctText, _valueFont, pctBrush, x, y - 3);
 
-        int pctW = (int)g.MeasureString(pctText, _valueFont).Width + 8;
+        int pctW = (int)g.MeasureString(pctText, _valueFont).Width + 10;
         int barX = x + pctW;
         int barW = cw - pctW;
         int barH = 6;
-        int barY = y + 3;
+        int barY = y + 5;
 
         Color barBg = isDark ? Color.FromArgb(20, 255, 255, 255) : Color.FromArgb(15, 0, 0, 0);
         using (var bgBrush = new SolidBrush(barBg))
@@ -208,7 +208,7 @@ public class FloatingWidget : Form
             g.FillRectangle(fillBrush, barX, barY, fillW, barH);
         }
 
-        y += 16;
+        y += 20;
 
         // ── 第三行：详情小字 ──
         Color detailColor = isDark ? Color.FromArgb(80, 90, 115) : Color.FromArgb(140, 140, 160);
@@ -225,7 +225,7 @@ public class FloatingWidget : Form
             g.DrawString($"{FormatNumber(item.Used)} / {FormatNumber(item.Total)}", _detailFont, detailBrush, x, y);
         }
 
-        return y + 14;
+        return y + 16;
     }
 
     #endregion

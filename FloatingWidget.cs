@@ -121,10 +121,15 @@ public class FloatingWidget : Form
         MouseEnter += (_, _) => { _hideTimer.Stop(); if (_isSnapped && !_isExpanded) Expand(); };
         MouseLeave += (_, _) => { if (_isSnapped) _hideTimer.Start(); };
 
-        _themeChangedHandler = (_) =>
+        _themeChangedHandler = (isDark) =>
         {
-            if (InvokeRequired) BeginInvoke(() => Invalidate());
-            else Invalidate();
+            void Update()
+            {
+                BackColor = isDark ? Color.FromArgb(30, 30, 46) : Color.FromArgb(239, 241, 245);
+                Invalidate();
+            }
+            if (InvokeRequired) BeginInvoke(Update);
+            else Update();
         };
         _themeService.ThemeChanged += _themeChangedHandler;
     }
@@ -153,9 +158,6 @@ public class FloatingWidget : Form
         Color borderColor = isDark ? Color.FromArgb(49, 50, 68) : Color.FromArgb(204, 208, 218);
         Color statColor = isDark ? Color.FromArgb(127, 132, 156) : Color.FromArgb(140, 143, 161);
         Color footerColor = isDark ? Color.FromArgb(88, 91, 112) : Color.FromArgb(156, 160, 176);
-
-        // 同步 BackColor（用于窗口方角区域，与背景色一致）
-        if (BackColor != bg) BackColor = bg;
 
         // 背景
         using (var bgBrush = new SolidBrush(bg))

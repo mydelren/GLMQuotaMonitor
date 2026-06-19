@@ -20,7 +20,8 @@ public class QuotaService : IDisposable
     };
 
     private readonly HttpClient _http;
-    private System.Windows.Forms.Timer? _pollTimer;
+    private CancellationTokenSource? _pollCts;
+    private Task? _pollTask;
     private int _consecutiveFailures;
     private QuotaSnapshot _lastSnapshot = new() { IsOffline = true };
 
@@ -36,28 +37,39 @@ public class QuotaService : IDisposable
     public event Action<string>? Error;
 
     /// <summary>
-    /// 启动轮询
+    /// 启动轮询（线程安全，可重复调用）
     /// </summary>
-    public async void StartPolling(int intervalMinutes, Func<string> tokenGetter, Func<string> baseUrlGetter)
+    public void StartPolling(int intervalMinutes, Func<string> tokenGetter, Func<string> baseUrlGetter)
     {
         StopPolling();
 
-        // 启动延迟，等待网络就绪
-        await Task.Delay(StartupDelayMs);
+        _consecutiveFailures = 0;
+        var cts = new CancellationTokenSource();
+        _pollCts = cts;
+        int intervalMs = Math.Clamp(intervalMinutes, 1, 30) * 60 * 1000;
 
-        // 首次请求
-        await FetchQuota(tokenGetter(), baseUrlGetter());
-
-        // 如果连续失败次数未超限，启动定时器
-        if (_consecutiveFailures < MaxRetryCount)
+        _pollTask = Task.Run(async () =>
         {
-            _pollTimer = new System.Windows.Forms.Timer
+            try
             {
-                Interval = Math.Clamp(intervalMinutes, 1, 30) * 60 * 1000
-            };
-            _pollTimer.Tick += async (_, _) => await FetchQuota(tokenGetter(), baseUrlGetter());
-            _pollTimer.Start();
-        }
+                // 启动延迟
+                await Task.Delay(StartupDelayMs, cts.Token);
+
+                while (!cts.Token.IsCancellationRequested)
+                {
+                    await FetchQuota(tokenGetter(), baseUrlGetter(), cts.Token);
+
+                    if (_consecutiveFailures >= MaxRetryCount)
+                        break;
+
+                    await Task.Delay(intervalMs, cts.Token);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // 正常取消，忽略
+            }
+        }, cts.Token);
     }
 
     /// <summary>
@@ -65,23 +77,29 @@ public class QuotaService : IDisposable
     /// </summary>
     public void StopPolling()
     {
-        _pollTimer?.Stop();
-        _pollTimer?.Dispose();
-        _pollTimer = null;
+        _pollCts?.Cancel();
+        _pollCts?.Dispose();
+        _pollCts = null;
+
+        if (_pollTask != null)
+        {
+            // 不等待，避免阻塞 UI 线程
+            _pollTask = null;
+        }
     }
 
     /// <summary>
     /// 手动刷新一次
     /// </summary>
-    public async Task QuickRefresh(string token, string baseUrl)
+    public async Task QuickRefresh(string token, string baseUrl, int intervalMinutes = 3)
     {
-        _consecutiveFailures = 0; // 手动刷新重置失败计数
-        await FetchQuota(token, baseUrl);
+        _consecutiveFailures = 0;
+        await FetchQuota(token, baseUrl, CancellationToken.None);
 
-        // 如果定时器已停止（因连续失败），重新启动
-        if (_pollTimer == null && _consecutiveFailures < MaxRetryCount)
+        // 如果轮询已停止（因连续失败），重新启动
+        if (_pollCts == null && _consecutiveFailures < MaxRetryCount)
         {
-            StartPolling(3, () => token, () => baseUrl);
+            StartPolling(intervalMinutes, () => token, () => baseUrl);
         }
     }
 
@@ -93,12 +111,18 @@ public class QuotaService : IDisposable
     /// <summary>
     /// 执行一次配额查询
     /// </summary>
-    private async Task FetchQuota(string token, string baseUrl)
+    private async Task FetchQuota(string token, string baseUrl, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(token))
         {
-            _lastSnapshot = new QuotaSnapshot { IsOffline = true };
-            QuotaUpdated?.Invoke(_lastSnapshot);
+            var offline = new QuotaSnapshot
+            {
+                IsOffline = true,
+                McpQuota = _lastSnapshot.McpQuota,
+                Token5hQuota = _lastSnapshot.Token5hQuota
+            };
+            _lastSnapshot = offline;
+            QuotaUpdated?.Invoke(offline);
             Error?.Invoke("Token 未配置");
             return;
         }
@@ -112,33 +136,44 @@ public class QuotaService : IDisposable
             request.Headers.Add("Authorization", token);
             request.Headers.Add("Accept-Language", "en-US,en");
 
-            using var response = await _http.SendAsync(request);
+            using var response = await _http.SendAsync(request, ct);
             response.EnsureSuccessStatusCode();
 
-            string json = await response.Content.ReadAsStringAsync();
+            string json = await response.Content.ReadAsStringAsync(ct);
             var snapshot = ParseQuotaResponse(json);
             snapshot.Timestamp = DateTime.Now;
+            snapshot.IsOffline = false;
 
             _lastSnapshot = snapshot;
             _consecutiveFailures = 0;
 
             QuotaUpdated?.Invoke(snapshot);
         }
+        catch (OperationCanceledException)
+        {
+            throw; // 让调用方处理取消
+        }
         catch (Exception ex)
         {
             _consecutiveFailures++;
-            _lastSnapshot.IsOffline = true;
+
+            // 创建新的离线快照，保留上次数据
+            var offline = new QuotaSnapshot
+            {
+                IsOffline = true,
+                McpQuota = _lastSnapshot.McpQuota,
+                Token5hQuota = _lastSnapshot.Token5hQuota,
+                CallCount = _lastSnapshot.CallCount,
+                TokenUsage = _lastSnapshot.TokenUsage
+            };
+            _lastSnapshot = offline;
 
             Error?.Invoke($"请求失败 ({_consecutiveFailures}/{MaxRetryCount}): {ex.Message}");
 
             if (_consecutiveFailures >= MaxRetryCount)
-            {
-                StopPolling();
                 Error?.Invoke("连续失败次数过多，已停止自动轮询，请手动刷新");
-            }
 
-            // 仍然通知 UI 更新（显示离线状态）
-            QuotaUpdated?.Invoke(_lastSnapshot);
+            QuotaUpdated?.Invoke(offline);
         }
     }
 
@@ -162,7 +197,6 @@ public class QuotaService : IDisposable
         {
             string type = item.TryGetProperty("type", out var t) ? t.GetString() ?? "" : "";
 
-            // 兼容多种字段名
             long total = GetLongAny(item, "usage", "limit_value", "limitValue");
             long used = GetLongAny(item, "currentValue", "used_value", "usedValue");
             long remaining = GetLongAny(item, "remaining", "remaining_value", "remainingValue");
@@ -194,25 +228,16 @@ public class QuotaService : IDisposable
         return snapshot;
     }
 
-    /// <summary>
-    /// 从多个可能的字段名中获取 long 值
-    /// </summary>
     private static long GetLongAny(JsonElement element, params string[] names)
     {
         foreach (string name in names)
         {
-            if (element.TryGetProperty(name, out var val))
-            {
-                if (val.TryGetInt64(out long result))
-                    return result;
-            }
+            if (element.TryGetProperty(name, out var val) && val.TryGetInt64(out long result))
+                return result;
         }
         return 0;
     }
 
-    /// <summary>
-    /// 标准化 base URL，确保有 scheme
-    /// </summary>
     private static string NormalizeBaseUrl(string url)
     {
         url = url.TrimEnd('/');
@@ -220,7 +245,6 @@ public class QuotaService : IDisposable
         if (!url.StartsWith("http://") && !url.StartsWith("https://"))
             url = "https://" + url;
 
-        // 如果用户填了带 /api/anthropic 后缀的路径，去掉
         int apiIdx = url.IndexOf("/api/anthropic", StringComparison.OrdinalIgnoreCase);
         if (apiIdx > 0)
             url = url[..apiIdx];

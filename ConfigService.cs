@@ -66,23 +66,23 @@ public class ConfigService
     }
 
     /// <summary>
-    /// 保存配置到文件
+    /// 保存配置到文件，写入成功后才触发 ConfigChanged
     /// </summary>
     public void Save(AppConfig config)
     {
-        _config = config;
-
         try
         {
             Directory.CreateDirectory(ConfigDir);
             string json = JsonSerializer.Serialize(config, JsonOptions);
             File.WriteAllText(ConfigPath, json);
         }
-        catch (IOException ex)
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
         {
             System.Diagnostics.Debug.WriteLine($"[ConfigService] Save failed: {ex.Message}");
+            return; // 写入失败，不更新内存，不触发事件
         }
 
+        _config = config;
         ConfigChanged?.Invoke(_config);
     }
 

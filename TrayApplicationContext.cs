@@ -124,13 +124,16 @@ public class TrayApplicationContext : ApplicationContext
     /// </summary>
     private void ShowPopup()
     {
-        // 如果已有弹窗，关闭它
+        // 如果已有弹窗且可见，关闭（切换行为）
         if (_popup?.Visible == true)
         {
             _popup.Close();
-            _popup = null;
             return;
         }
+
+        // 释放之前关闭的弹窗资源
+        _popup?.Dispose();
+        _popup = null;
 
         var snapshot = _quotaService.GetLastSnapshot();
         bool isDark = _themeService.IsDark;
@@ -314,17 +317,21 @@ public class TrayApplicationContext : ApplicationContext
     {
         if (!_notifyIcon.Visible) return;
 
+        var config = _configService.Config;
+        var status = snapshot.GetStatus(config.WarningThreshold, config.CriticalThreshold);
+
         // 更新托盘图标
-        _notifyIcon.Icon = TrayIconFactory.GetIcon(snapshot.Status);
+        _notifyIcon.Icon = TrayIconFactory.GetIcon(status);
 
         // 更新 tooltip
         string mcpPct = $"{snapshot.McpQuota.Percentage:F0}%";
         string tokenPct = $"{snapshot.Token5hQuota.Percentage:F0}%";
         string calls = FormatNumber(snapshot.CallCount);
-        _notifyIcon.Text = $"GLM: MCP {mcpPct} | 5h {tokenPct} | {calls}";
+        string tooltip = $"GLM: MCP {mcpPct} | 5h {tokenPct} | {calls}";
+        _notifyIcon.Text = tooltip.Length > 127 ? tooltip[..127] : tooltip;
 
         // 如果超限，弹通知
-        if (snapshot.Status == QuotaStatus.Critical && !snapshot.IsOffline)
+        if (status == QuotaStatus.Critical && !snapshot.IsOffline)
         {
             _notifyIcon.ShowBalloonTip(5000,
                 "GLM 配额预警",
@@ -359,18 +366,14 @@ public class TrayApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// 启动/重启监控
+    /// 启动/重启监控（闭包通过 _configService 读取最新配置，避免引用过期对象）
     /// </summary>
     private void StartMonitoring()
     {
-        var config = _configService.Config;
-        string token = config.GetEffectiveAuthToken();
-        string baseUrl = config.GetBaseUrl();
-
         _quotaService.StartPolling(
-            config.GetEffectivePollingInterval(),
-            () => config.GetEffectiveAuthToken(),
-            () => config.GetBaseUrl());
+            _configService.Config.GetEffectivePollingInterval(),
+            () => _configService.Config.GetEffectiveAuthToken(),
+            () => _configService.Config.GetBaseUrl());
     }
 
     /// <summary>
@@ -379,7 +382,10 @@ public class TrayApplicationContext : ApplicationContext
     private async void RefreshQuota()
     {
         var config = _configService.Config;
-        await _quotaService.QuickRefresh(config.GetEffectiveAuthToken(), config.GetBaseUrl());
+        await _quotaService.QuickRefresh(
+            config.GetEffectiveAuthToken(),
+            config.GetBaseUrl(),
+            config.GetEffectivePollingInterval());
     }
 
     /// <summary>
@@ -476,15 +482,11 @@ public class TrayApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// 退出应用
+    /// 退出应用（清理由 Dispose 统一处理）
     /// </summary>
     private void ExitApplication()
     {
         _notifyIcon.Visible = false;
-        _quotaService.Dispose();
-        _themeService.Dispose();
-        _floatingBar?.Dispose();
-        TrayIconFactory.ClearCache();
         Application.Exit();
     }
 

@@ -259,7 +259,10 @@ public class SettingsForm : Form
             Theme = (ThemeMode)_cmbTheme.SelectedIndex,
             ShowFloatingBar = _chkFloatingBar.Checked,
             WarningThreshold = (int)_nudWarning.Value,
-            CriticalThreshold = (int)_nudCritical.Value
+            CriticalThreshold = (int)_nudCritical.Value,
+            // 保留浮动条位置（由 FloatingBar 自行更新）
+            FloatingBarX = _configService.Config.FloatingBarX,
+            FloatingBarY = _configService.Config.FloatingBarY
         };
 
         _configService.Save(config);

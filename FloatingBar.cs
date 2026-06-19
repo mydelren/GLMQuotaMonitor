@@ -17,6 +17,7 @@ public class FloatingBar : Form
     private const int RevealEdgeWidth = 4;
 
     private readonly ThemeService _themeService;
+    private readonly AppConfig _config;
     private readonly System.Windows.Forms.Timer _hideTimer;
     private readonly Action<bool> _themeChangedHandler;
 
@@ -32,6 +33,7 @@ public class FloatingBar : Form
     public FloatingBar(ThemeService themeService, AppConfig config)
     {
         _themeService = themeService;
+        _config = config;
 
         // 窗口基本设置
         FormBorderStyle = FormBorderStyle.None;
@@ -76,8 +78,14 @@ public class FloatingBar : Form
             if (_isSnapped) _hideTimer.Start();
         };
 
-        // 主题变更时重绘（存引用以便正确取消订阅）
-        _themeChangedHandler = (_) => Invalidate();
+        // 主题变更时重绘（存引用以便正确取消订阅，处理跨线程调用）
+        _themeChangedHandler = (_) =>
+        {
+            if (InvokeRequired)
+                BeginInvoke(() => Invalidate());
+            else
+                Invalidate();
+        };
         _themeService.ThemeChanged += _themeChangedHandler;
     }
 
@@ -115,7 +123,8 @@ public class FloatingBar : Form
         }
 
         // 状态指示小圆点
-        Color dotColor = _snapshot.Status switch
+        var status = _snapshot.GetStatus(_config.WarningThreshold, _config.CriticalThreshold);
+        Color dotColor = status switch
         {
             QuotaStatus.Normal => Color.FromArgb(0, 180, 0),
             QuotaStatus.Warning => Color.FromArgb(230, 180, 0),
@@ -276,6 +285,7 @@ public class FloatingBar : Form
     /// </summary>
     private void ApplyRoundedCorners()
     {
+        var oldRegion = Region;
         using var path = new GraphicsPath();
         int radius = 8;
         path.AddArc(0, 0, radius * 2, radius * 2, 180, 90);
@@ -284,6 +294,7 @@ public class FloatingBar : Form
         path.AddArc(0, Height - radius * 2, radius * 2, radius * 2, 90, 90);
         path.CloseFigure();
         Region = new Region(path);
+        oldRegion?.Dispose();
     }
 
     protected override void Dispose(bool disposing)

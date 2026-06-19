@@ -56,18 +56,17 @@ public class QuotaSnapshot
     /// <summary>是否为离线/错误数据</summary>
     public bool IsOffline { get; set; }
 
-    /// <summary>整体配额状态</summary>
-    public QuotaStatus Status
+    /// <summary>
+    /// 根据阈值计算整体配额状态
+    /// </summary>
+    public QuotaStatus GetStatus(int warningThreshold = 50, int criticalThreshold = 80)
     {
-        get
-        {
-            if (IsOffline) return QuotaStatus.Offline;
+        if (IsOffline) return QuotaStatus.Offline;
 
-            double maxPct = Math.Max(McpQuota.Percentage, Token5hQuota.Percentage);
-            if (maxPct >= 80) return QuotaStatus.Critical;
-            if (maxPct >= 50) return QuotaStatus.Warning;
-            return QuotaStatus.Normal;
-        }
+        double maxPct = Math.Max(McpQuota.Percentage, Token5hQuota.Percentage);
+        if (maxPct >= criticalThreshold) return QuotaStatus.Critical;
+        if (maxPct >= warningThreshold) return QuotaStatus.Warning;
+        return QuotaStatus.Normal;
     }
 
     /// <summary>调用次数（来自 model-usage 接口，可选）</summary>

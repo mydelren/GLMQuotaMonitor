@@ -46,7 +46,7 @@ public class FloatingWidget : Form
     private readonly Font _labelFont = new("Segoe UI", 9f);
     private readonly Font _valueFont = new("Segoe UI", 11f, FontStyle.Bold);
     private readonly Font _detailFont = new("Segoe UI", 8f);
-    private readonly Font _refreshFont = new("Segoe UI", 8.5f);
+    private readonly Font _tinyFont = new("Segoe UI", 7.5f);
 
     public FloatingWidget(ThemeService themeService, ConfigService configService, Action onRefresh)
     {
@@ -143,23 +143,29 @@ public class FloatingWidget : Form
             float statsX = (w - textSize.Width) / 2;
             g.DrawString(line, _detailFont, statBrush, statsX, y);
         }
-        y += 16;
+        y += 12;
+
+        // ═══ 分隔线 ═══
+        Color lineColor = isDark ? Color.FromArgb(20, 255, 255, 255) : Color.FromArgb(15, 0, 0, 0);
+        using (var linePen = new Pen(lineColor))
+            g.DrawLine(linePen, x, y, x + cw, y);
+        y += 8;
 
         // ═══ 刷新行 ═══
-        // 左侧：刷新按钮
-        Color refreshColor = isDark ? Color.FromArgb(123, 140, 222) : Color.FromArgb(60, 80, 180);
+        // 左侧：刷新按钮（低调）
+        Color refreshColor = isDark ? Color.FromArgb(100, 110, 150) : Color.FromArgb(80, 90, 120);
         using var refreshBrush = new SolidBrush(refreshColor);
         string refreshText = "⟳ 刷新";
-        g.DrawString(refreshText, _refreshFont, refreshBrush, x, y);
-        var refreshSize = g.MeasureString(refreshText, _refreshFont);
+        g.DrawString(refreshText, _labelFont, refreshBrush, x, y);
+        var refreshSize = g.MeasureString(refreshText, _labelFont);
         _refreshBtnRect = new Rectangle(x, y, (int)refreshSize.Width + 4, (int)refreshSize.Height + 2);
 
-        // 右侧：更新时间
-        Color timeColor = isDark ? Color.FromArgb(80, 90, 115) : Color.FromArgb(140, 140, 160);
+        // 右侧：更新时间（更小更淡）
+        Color timeColor = isDark ? Color.FromArgb(70, 80, 100) : Color.FromArgb(150, 150, 165);
         using var timeBrush = new SolidBrush(timeColor);
-        string timeText = _snapshot.IsOffline ? "离线" : $"{_snapshot.Timestamp:HH:mm:ss} 更新";
-        var timeSize = g.MeasureString(timeText, _detailFont);
-        g.DrawString(timeText, _detailFont, timeBrush, x + cw - timeSize.Width, y + 1);
+        string timeText = _snapshot.IsOffline ? "离线" : $"{_snapshot.Timestamp:HH:mm} 更新";
+        var timeSize = g.MeasureString(timeText, _tinyFont);
+        g.DrawString(timeText, _tinyFont, timeBrush, x + cw - timeSize.Width, y + 1);
     }
 
     /// <summary>
@@ -353,7 +359,7 @@ public class FloatingWidget : Form
             _labelFont.Dispose();
             _valueFont.Dispose();
             _detailFont.Dispose();
-            _refreshFont.Dispose();
+            _tinyFont.Dispose();
         }
         base.Dispose(disposing);
     }

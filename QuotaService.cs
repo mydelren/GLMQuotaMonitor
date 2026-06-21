@@ -96,11 +96,8 @@ public class QuotaService : IDisposable
         _consecutiveFailures = 0;
         await FetchQuota(token, baseUrl, CancellationToken.None);
 
-        // 如果轮询已停止（因连续失败），重新启动
-        if (_pollCts == null && _consecutiveFailures < MaxRetryCount)
-        {
-            StartPolling(intervalMinutes, () => token, () => baseUrl);
-        }
+        // 无论轮询是否在运行，都重启（确保轮询不中断）
+        StartPolling(intervalMinutes, () => token, () => baseUrl);
     }
 
     /// <summary>

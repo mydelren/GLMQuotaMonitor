@@ -26,6 +26,20 @@ public class QuotaService : IDisposable
     private volatile bool _enteredBackoff;
     private QuotaSnapshot _lastSnapshot = new() { IsOffline = true };
 
+    // 临时调试日志（排查轮询问题后删除）
+    private static readonly string LogPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "GLMQuotaMonitor", "poll-debug.log");
+    private static void Log(string msg)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(LogPath)!);
+            File.AppendAllText(LogPath, $"{DateTime.Now:HH:mm:ss.fff} {msg}\n");
+        }
+        catch { }
+    }
+
     public QuotaService()
     {
         _http = new HttpClient { Timeout = TimeSpan.FromMilliseconds(RequestTimeoutMs) };
@@ -48,17 +62,22 @@ public class QuotaService : IDisposable
         var cts = new CancellationTokenSource();
         _pollCts = cts;
         int intervalMs = Math.Clamp(intervalMinutes, 1, 30) * 60 * 1000;
+        Log($"[StartPolling] interval={intervalMs}ms, token={tokenGetter()[..Math.Min(8, tokenGetter().Length)]}...");
 
         _pollTask = Task.Run(async () =>
         {
             try
             {
                 // 启动延迟
+                Log("[PollTask] startup delay begin");
                 await Task.Delay(StartupDelayMs, cts.Token);
+                Log("[PollTask] startup delay done, entering loop");
 
                 while (!cts.Token.IsCancellationRequested)
                 {
+                    Log("[PollTask] fetching...");
                     await FetchQuota(tokenGetter(), baseUrlGetter(), cts.Token);
+                    Log($"[PollTask] fetch done, failures={_consecutiveFailures}, backoff={_enteredBackoff}");
 
                     if (_consecutiveFailures >= MaxRetryCount)
                     {
@@ -80,7 +99,12 @@ public class QuotaService : IDisposable
             }
             catch (OperationCanceledException)
             {
+                Log("[PollTask] cancelled");
                 // 正常取消，忽略
+            }
+            catch (Exception ex)
+            {
+                Log($"[PollTask] UNHANDLED: {ex}");
             }
         }, cts.Token);
     }
@@ -123,8 +147,10 @@ public class QuotaService : IDisposable
     /// </summary>
     private async Task FetchQuota(string token, string baseUrl, CancellationToken ct)
     {
+        Log($"[FetchQuota] token={token[..Math.Min(8, token.Length)]}..., base={baseUrl}");
         if (string.IsNullOrWhiteSpace(token))
         {
+            Log("[FetchQuota] token empty, returning offline");
             var offline = new QuotaSnapshot
             {
                 IsOffline = true,
@@ -172,6 +198,7 @@ public class QuotaService : IDisposable
             _consecutiveFailures = 0;
             _enteredBackoff = false;
 
+            Log($"[FetchQuota] OK, failures reset");
             QuotaUpdated?.Invoke(snapshot);
         }
         catch (OperationCanceledException)
@@ -181,6 +208,7 @@ public class QuotaService : IDisposable
         catch (Exception ex)
         {
             _consecutiveFailures++;
+            Log($"[FetchQuota] FAIL ({_consecutiveFailures}): {ex.Message}");
 
             var offline = new QuotaSnapshot
             {

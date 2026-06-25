@@ -35,9 +35,6 @@ public class AppConfig
     /// <summary>轮询间隔（分钟）</summary>
     public int PollingIntervalMinutes { get; set; } = 5;
 
-    /// <summary>开机自启动</summary>
-    public bool AutoStart { get; set; }
-
     /// <summary>主题模式</summary>
     public ThemeMode Theme { get; set; } = ThemeMode.Auto;
 

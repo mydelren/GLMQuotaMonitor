@@ -23,6 +23,7 @@ public class QuotaService : IDisposable
     private CancellationTokenSource? _pollCts;
     private Task? _pollTask;
     private int _consecutiveFailures;
+    private volatile bool _enteredBackoff;
     private QuotaSnapshot _lastSnapshot = new() { IsOffline = true };
 
     public QuotaService()
@@ -60,9 +61,21 @@ public class QuotaService : IDisposable
                     await FetchQuota(tokenGetter(), baseUrlGetter(), cts.Token);
 
                     if (_consecutiveFailures >= MaxRetryCount)
-                        break;
-
-                    await Task.Delay(intervalMs, cts.Token);
+                    {
+                        if (!_enteredBackoff)
+                        {
+                            _enteredBackoff = true;
+                            Error?.Invoke("连续失败，已进入退避重试模式");
+                        }
+                        int shift = Math.Min(_consecutiveFailures - MaxRetryCount, 20);
+                        int retryDelay = (int)Math.Min((long)intervalMs * (1L << shift), 30L * 60 * 1000);
+                        await Task.Delay(retryDelay, cts.Token);
+                    }
+                    else
+                    {
+                        _enteredBackoff = false;
+                        await Task.Delay(intervalMs, cts.Token);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -157,6 +170,7 @@ public class QuotaService : IDisposable
 
             _lastSnapshot = snapshot;
             _consecutiveFailures = 0;
+            _enteredBackoff = false;
 
             QuotaUpdated?.Invoke(snapshot);
         }
@@ -179,9 +193,6 @@ public class QuotaService : IDisposable
             _lastSnapshot = offline;
 
             Error?.Invoke($"请求失败 ({_consecutiveFailures}/{MaxRetryCount}): {ex.Message}");
-
-            if (_consecutiveFailures >= MaxRetryCount)
-                Error?.Invoke("连续失败次数过多，已停止自动轮询，请手动刷新");
 
             QuotaUpdated?.Invoke(offline);
         }

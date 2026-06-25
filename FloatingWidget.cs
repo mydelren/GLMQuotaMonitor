@@ -46,7 +46,6 @@ public class FloatingWidget : Form
     private readonly ConfigService _configService;
     private readonly Action _onRefresh;
     private readonly Action _onLocate;
-    private readonly Action _onToggleAutoStart;
     private readonly Action _onCycleTheme;
     private readonly Action _onShowSettings;
     private readonly System.Windows.Forms.Timer _hideTimer;
@@ -70,7 +69,6 @@ public class FloatingWidget : Form
         ConfigService configService,
         Action onRefresh,
         Action onLocate,
-        Action onToggleAutoStart,
         Action onCycleTheme,
         Action onShowSettings)
     {
@@ -78,7 +76,6 @@ public class FloatingWidget : Form
         _configService = configService;
         _onRefresh = onRefresh;
         _onLocate = onLocate;
-        _onToggleAutoStart = onToggleAutoStart;
         _onCycleTheme = onCycleTheme;
         _onShowSettings = onShowSettings;
         var config = configService.Config;
@@ -111,9 +108,6 @@ public class FloatingWidget : Form
         var locateItem = new ToolStripMenuItem("📍 定位浮动条");
         locateItem.Click += (_, _) => _onLocate();
         menu.Items.Add(locateItem);
-        var autoStartToggle = new ToolStripMenuItem("开机自启动") { CheckOnClick = true, Checked = config.AutoStart };
-        autoStartToggle.Click += (_, _) => _onToggleAutoStart();
-        menu.Items.Add(autoStartToggle);
         menu.Items.Add(new ToolStripSeparator());
         var themeItem = new ToolStripMenuItem("☀ 切换主题");
         themeItem.Click += (_, _) => _onCycleTheme();

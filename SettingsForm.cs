@@ -15,7 +15,6 @@ public class SettingsForm : Form
     private Button _btnToggleToken = null!;
     private ComboBox _cmbPlatform = null!;
     private NumericUpDown _nudPolling = null!;
-    private CheckBox _chkAutoStart = null!;
     private ComboBox _cmbTheme = null!;
     private CheckBox _chkFloatingBar = null!;
     private NumericUpDown _nudWarning = null!;
@@ -103,16 +102,6 @@ public class SettingsForm : Form
         Controls.Add(_nudPolling);
         Controls.Add(CreateLabel("分钟", inputX + 86, y + 3));
         y += 36;
-
-        // 开机自启动
-        _chkAutoStart = new CheckBox
-        {
-            Text = "开机自启动",
-            Location = new Point(inputX, y),
-            Size = new Size(inputWidth, 24)
-        };
-        Controls.Add(_chkAutoStart);
-        y += 32;
 
         // 主题
         Controls.Add(CreateLabel("主题:", labelX, y));
@@ -229,7 +218,6 @@ public class SettingsForm : Form
         _txtToken.Text = config.AuthToken;
         _cmbPlatform.SelectedIndex = (int)config.Platform;
         _nudPolling.Value = config.GetEffectivePollingInterval();
-        _chkAutoStart.Checked = config.AutoStart;
         _cmbTheme.SelectedIndex = (int)config.Theme;
         _chkFloatingBar.Checked = config.ShowFloatingBar;
         _nudWarning.Value = config.WarningThreshold;
@@ -255,7 +243,6 @@ public class SettingsForm : Form
             AuthToken = _txtToken.Text.Trim(),
             Platform = (PlatformType)_cmbPlatform.SelectedIndex,
             PollingIntervalMinutes = (int)_nudPolling.Value,
-            AutoStart = _chkAutoStart.Checked,
             Theme = (ThemeMode)_cmbTheme.SelectedIndex,
             ShowFloatingBar = _chkFloatingBar.Checked,
             WarningThreshold = (int)_nudWarning.Value,
@@ -267,33 +254,7 @@ public class SettingsForm : Form
 
         _configService.Save(config);
 
-        // 更新开机自启
-        SetAutoStart(config.AutoStart);
-
         Close();
-    }
-
-    private static void SetAutoStart(bool enable)
-    {
-        const string regPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        const string appName = "GLMQuotaMonitor";
-
-        try
-        {
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(regPath, true);
-            if (key == null) return;
-
-            if (enable)
-            {
-                string exePath = Environment.ProcessPath ?? "";
-                key.SetValue(appName, $"\"{exePath}\"");
-            }
-            else
-            {
-                key.DeleteValue(appName, false);
-            }
-        }
-        catch { }
     }
 
     private void OnThemeChanged(bool isDark)

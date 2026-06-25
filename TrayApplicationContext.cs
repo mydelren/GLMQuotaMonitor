@@ -17,8 +17,9 @@ public class TrayApplicationContext : ApplicationContext
     private readonly ThemeService _themeService;
     private readonly SynchronizationContext? _syncContext;
 
-    private ToolStripMenuItem? _autoStartToggle;
     private FloatingWidget? _floatingBar;
+    private long _lastNotifiedResetTime = long.MinValue;
+    private DateTime _lastNotifiedTime = DateTime.MinValue;
 
     public TrayApplicationContext()
     {
@@ -93,14 +94,6 @@ public class TrayApplicationContext : ApplicationContext
         locateItem.Click += (_, _) => LocateFloatingBar();
         menu.Items.Add(locateItem);
 
-        _autoStartToggle = new ToolStripMenuItem("开机自启动")
-        {
-            CheckOnClick = true,
-            Checked = _configService.Config.AutoStart
-        };
-        _autoStartToggle.Click += OnToggleAutoStart;
-        menu.Items.Add(_autoStartToggle);
-
         menu.Items.Add(new ToolStripSeparator());
 
         var refreshItem = new ToolStripMenuItem("⟳ 立即刷新");
@@ -151,10 +144,23 @@ public class TrayApplicationContext : ApplicationContext
         // 如果超限，弹通知
         if (status == QuotaStatus.Critical && !snapshot.IsOffline)
         {
-            _notifyIcon.ShowBalloonTip(5000,
-                "GLM 配额预警",
-                $"MCP 配额: {mcpPct}\n5h Token: {tokenPct}",
-                ToolTipIcon.Warning);
+            long resetTime = snapshot.Token5hQuota.NextResetTime;
+            bool shouldNotify;
+
+            if (resetTime > 0)
+                shouldNotify = resetTime != _lastNotifiedResetTime;
+            else
+                shouldNotify = (DateTime.Now - _lastNotifiedTime).TotalHours >= 1;
+
+            if (shouldNotify)
+            {
+                _lastNotifiedResetTime = resetTime;
+                _lastNotifiedTime = DateTime.Now;
+                _notifyIcon.ShowBalloonTip(5000,
+                    "GLM 配额预警",
+                    $"MCP 配额: {mcpPct}\n5h Token: {tokenPct}",
+                    ToolTipIcon.Warning);
+            }
         }
 
         // 更新浮动条
@@ -215,18 +221,6 @@ public class TrayApplicationContext : ApplicationContext
     }
 
     /// <summary>
-    /// 切换开机自启动
-    /// </summary>
-    private void OnToggleAutoStart(object? sender, EventArgs e)
-    {
-        var config = _configService.Config;
-        config.AutoStart = _autoStartToggle?.Checked ?? false;
-        _configService.Save(config);
-
-        SetAutoStart(config.AutoStart);
-    }
-
-    /// <summary>
     /// 显示浮动条
     /// </summary>
     private void ShowFloatingBar()
@@ -237,7 +231,6 @@ public class TrayApplicationContext : ApplicationContext
             _themeService, _configService,
             RefreshQuota,
             LocateFloatingBar,
-            ToggleAutoStart,
             CycleTheme,
             ShowSettings);
         _floatingBar.UpdateData(_quotaService.GetLastSnapshot());
@@ -263,61 +256,11 @@ public class TrayApplicationContext : ApplicationContext
         form.ShowDialog();
     }
 
-    /// <summary>
-    /// 切换开机自启动
-    /// </summary>
-    private void ToggleAutoStart()
-    {
-        var config = _configService.Config;
-        config.AutoStart = !config.AutoStart;
-        _configService.Save(config);
-        SetAutoStart(config.AutoStart);
-        if (_autoStartToggle != null) _autoStartToggle.Checked = config.AutoStart;
-    }
-
-    /// <summary>
-    /// 循环切换主题：Auto → Dark → Light → Auto
-    /// </summary>
     private void CycleTheme()
     {
         var config = _configService.Config;
-        config.Theme = config.Theme switch
-        {
-            ThemeMode.Auto => ThemeMode.Dark,
-            ThemeMode.Dark => ThemeMode.Light,
-            ThemeMode.Light => ThemeMode.Auto,
-            _ => ThemeMode.Auto
-        };
+        config.Theme = _themeService.IsDark ? ThemeMode.Light : ThemeMode.Dark;
         _configService.Save(config);
-    }
-
-    /// <summary>
-    /// 设置开机自启动（写注册表）
-    /// </summary>
-    private static void SetAutoStart(bool enable)
-    {
-        const string regPath = @"Software\Microsoft\Windows\CurrentVersion\Run";
-        const string appName = "GLMQuotaMonitor";
-
-        try
-        {
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(regPath, true);
-            if (key == null) return;
-
-            if (enable)
-            {
-                string exePath = Environment.ProcessPath ?? "";
-                key.SetValue(appName, $"\"{exePath}\"");
-            }
-            else
-            {
-                key.DeleteValue(appName, false);
-            }
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"[AutoStart] {ex.Message}");
-        }
     }
 
     /// <summary>

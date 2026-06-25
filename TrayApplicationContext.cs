@@ -1,6 +1,8 @@
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using GLMQuotaMonitor.Models;
+using System.IO;
+using System.Threading;
 
 namespace GLMQuotaMonitor;
 
@@ -20,6 +22,15 @@ public class TrayApplicationContext : ApplicationContext
     private FloatingWidget? _floatingBar;
     private long _lastNotifiedResetTime = long.MinValue;
     private DateTime _lastNotifiedTime = DateTime.MinValue;
+
+    // 临时调试日志
+    private static readonly string DebugLogPath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+        "GLMQuotaMonitor", "poll-debug.log");
+    private static void UILog(string msg)
+    {
+        try { File.AppendAllText(DebugLogPath, $"{DateTime.Now:HH:mm:ss.fff} {msg}\n"); } catch { }
+    }
 
     public TrayApplicationContext()
     {
@@ -114,14 +125,23 @@ public class TrayApplicationContext : ApplicationContext
     /// </summary>
     private void OnQuotaUpdated(QuotaSnapshot snapshot)
     {
+        UILog($"[OnQuotaUpdated] called, thread={Thread.CurrentThread.ManagedThreadId}, isOffline={snapshot.IsOffline}");
         if (SynchronizationContext.Current == null)
         {
             // 当前不在 UI 线程，通过 SynchronizationContext 调度
             var syncCtx = _syncContext;
             if (syncCtx != null)
+            {
+                UILog("[OnQuotaUpdated] posting to UI thread");
                 syncCtx.Post(_ => OnQuotaUpdated(snapshot), null);
+            }
+            else
+            {
+                UILog("[OnQuotaUpdated] ERROR: _syncContext is null!");
+            }
             return;
         }
+        UILog($"[OnQuotaUpdated] on UI thread, updating tray icon...");
         if (!_notifyIcon.Visible) return;
 
         var config = _configService.Config;
@@ -164,7 +184,9 @@ public class TrayApplicationContext : ApplicationContext
         }
 
         // 更新浮动条
+        UILog($"[OnQuotaUpdated] updating floating bar, hasBar={_floatingBar != null}");
         _floatingBar?.UpdateData(snapshot);
+        UILog("[OnQuotaUpdated] done");
     }
 
     /// <summary>

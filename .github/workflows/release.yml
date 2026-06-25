@@ -44,6 +44,15 @@ jobs:
           mv publish/light/GLMQuotaMonitor.exe publish/light/GLMQuotaMonitor-light.exe
           mv publish/full/GLMQuotaMonitor.exe publish/full/GLMQuotaMonitor-full.exe
 
+      - name: 计算文件大小
+        id: sizes
+        shell: bash
+        run: |
+          light_size=$(du -h publish/light/GLMQuotaMonitor-light.exe | cut -f1)
+          full_size=$(du -h publish/full/GLMQuotaMonitor-full.exe | cut -f1)
+          echo "LIGHT_SIZE=${light_size}" >> $GITHUB_OUTPUT
+          echo "FULL_SIZE=${full_size}" >> $GITHUB_OUTPUT
+
       - name: 获取版本号
         id: version
         shell: bash
@@ -62,8 +71,8 @@ jobs:
 
             | 文件 | 说明 | 体积 |
             |------|------|------|
-            | `GLMQuotaMonitor-light.exe` | 轻量版（框架依赖） | ~5-15MB |
-            | `GLMQuotaMonitor-full.exe` | 完整版（自包含） | ~60-80MB |
+            | `GLMQuotaMonitor-light.exe` | 轻量版（框架依赖） | ${{ steps.sizes.outputs.LIGHT_SIZE }} |
+            | `GLMQuotaMonitor-full.exe` | 完整版（自包含） | ${{ steps.sizes.outputs.FULL_SIZE }} |
 
             **轻量版** 需要已安装 [.NET 8 Desktop Runtime](https://dotnet.microsoft.com/download/dotnet/8.0)。如果不确定，请下载完整版。
 

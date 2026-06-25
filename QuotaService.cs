@@ -20,8 +20,7 @@ public class QuotaService : IDisposable
     };
 
     private readonly HttpClient _http;
-    private CancellationTokenSource? _pollCts;
-    private Task? _pollTask;
+    private readonly SafeCancellationTokenSource _pollCts = new();
     private int _consecutiveFailures;
     private volatile bool _enteredBackoff;
     private QuotaSnapshot _lastSnapshot = new() { IsOffline = true };
@@ -56,27 +55,27 @@ public class QuotaService : IDisposable
     /// </summary>
     public void StartPolling(int intervalMinutes, Func<string> tokenGetter, Func<string> baseUrlGetter)
     {
-        StopPolling();
+        _pollCts.CancelAndRecreate();
+        var token = _pollCts.Token;
 
         _consecutiveFailures = 0;
-        var cts = new CancellationTokenSource();
-        _pollCts = cts;
+        _enteredBackoff = false;
         int intervalMs = Math.Clamp(intervalMinutes, 1, 30) * 60 * 1000;
         Log($"[StartPolling] interval={intervalMs}ms, token={tokenGetter()[..Math.Min(8, tokenGetter().Length)]}...");
 
-        _pollTask = Task.Run(async () =>
+        _ = Task.Run(async () =>
         {
             try
             {
                 // 启动延迟
                 Log("[PollTask] startup delay begin");
-                await Task.Delay(StartupDelayMs, cts.Token);
+                await Task.Delay(StartupDelayMs, token);
                 Log("[PollTask] startup delay done, entering loop");
 
-                while (!cts.Token.IsCancellationRequested)
+                while (!token.IsCancellationRequested)
                 {
                     Log("[PollTask] fetching...");
-                    await FetchQuota(tokenGetter(), baseUrlGetter(), cts.Token);
+                    await FetchQuota(tokenGetter(), baseUrlGetter(), token);
                     Log($"[PollTask] fetch done, failures={_consecutiveFailures}, backoff={_enteredBackoff}");
 
                     if (_consecutiveFailures >= MaxRetryCount)
@@ -88,12 +87,12 @@ public class QuotaService : IDisposable
                         }
                         int shift = Math.Min(_consecutiveFailures - MaxRetryCount, 20);
                         int retryDelay = (int)Math.Min((long)intervalMs * (1L << shift), 30L * 60 * 1000);
-                        await Task.Delay(retryDelay, cts.Token);
+                        await Task.Delay(retryDelay, token);
                     }
                     else
                     {
                         _enteredBackoff = false;
-                        await Task.Delay(intervalMs, cts.Token);
+                        await Task.Delay(intervalMs, token);
                     }
                 }
             }
@@ -106,7 +105,7 @@ public class QuotaService : IDisposable
             {
                 Log($"[PollTask] UNHANDLED: {ex}");
             }
-        }, cts.Token);
+        });
     }
 
     /// <summary>
@@ -114,15 +113,7 @@ public class QuotaService : IDisposable
     /// </summary>
     public void StopPolling()
     {
-        _pollCts?.Cancel();
-        _pollCts?.Dispose();
-        _pollCts = null;
-
-        if (_pollTask != null)
-        {
-            // 不等待，避免阻塞 UI 线程
-            _pollTask = null;
-        }
+        _pollCts.CancelAndRecreate();
     }
 
     /// <summary>
@@ -384,7 +375,7 @@ public class QuotaService : IDisposable
 
     public void Dispose()
     {
-        StopPolling();
+        _pollCts.Dispose();
         _http.Dispose();
     }
 }

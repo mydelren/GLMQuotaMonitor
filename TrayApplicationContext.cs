@@ -34,7 +34,9 @@ public class TrayApplicationContext : ApplicationContext
 
     public TrayApplicationContext()
     {
-        _syncContext = SynchronizationContext.Current;
+        // 显式创建 WinForms 同步上下文。
+        // 构造函数在 Application.Run 内部调用，此时 SynchronizationContext.Current 可能尚未安装。
+        _syncContext = new WindowsFormsSynchronizationContext();
         _configService = new ConfigService();
         _quotaService = new QuotaService();
         _themeService = new ThemeService();

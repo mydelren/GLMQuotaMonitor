@@ -42,9 +42,16 @@ public class QuotaItem
     public long NextResetTime { get; set; }
 
     /// <summary>重置时间的本地 DateTime（null 表示未知）</summary>
-    public DateTime? ResetDateTime => NextResetTime > 0
-        ? DateTimeOffset.FromUnixTimeMilliseconds(NextResetTime).LocalDateTime
-        : null;
+    /// <remarks>API 返回毫秒时间戳；对疑似秒级数值做启发式纠正，避免出现 1970 年代日期</remarks>
+    public DateTime? ResetDateTime
+    {
+        get
+        {
+            if (NextResetTime <= 0) return null;
+            long ms = NextResetTime < 10_000_000_000 ? NextResetTime * 1000 : NextResetTime;
+            return DateTimeOffset.FromUnixTimeMilliseconds(ms).LocalDateTime;
+        }
+    }
 
     /// <summary>使用百分比 (0-100)，优先使用 API 直接返回的值</summary>
     public double Percentage

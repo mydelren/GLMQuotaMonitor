@@ -15,12 +15,13 @@ public class FloatingWidget : Form
     // ═══ 卡片尺寸 ═══
     private const int CardWidth = 240;
     private const int CardHeight = 126;
+    private const int CardRadius = 6;
     private const int CardHPadding = 20;
     private const int CardVPadding = 14;
 
     // ═══ 三列布局 ═══
-    private const int LabelColWidth = 70;
-    private const int BarWidth = 65;
+    private const int LabelColWidth = 64;
+    private const int BarWidth = 68;
     private const int BarHeight = 14;
     private const int PctColWidth = 50;
     private const int ColGap = 10;
@@ -58,11 +59,14 @@ public class FloatingWidget : Form
     private DockStyle _snapEdge = DockStyle.None;
     private bool _isExpanded;
 
-    // 缓存字体
+    // 缓存字体（页脚/统计行曾用 7.5-8pt，实测偏小且页脚对比度不足，整体上调一档）
     private readonly Font _labelFont = new("Segoe UI", 9f);
     private readonly Font _valueFont = new("Segoe UI", 11f, FontStyle.Bold);
-    private readonly Font _detailFont = new("Segoe UI", 8f);
-    private readonly Font _tinyFont = new("Segoe UI", 7.5f);
+    private readonly Font _detailFont = new("Segoe UI", 8.5f);
+    private readonly Font _tinyFont = new("Segoe UI", 8f);
+
+    /// <summary>迷你条悬停提示</summary>
+    private readonly System.Windows.Forms.ToolTip _tip = new();
 
     public FloatingWidget(
         ThemeService themeService,
@@ -84,7 +88,8 @@ public class FloatingWidget : Form
         ShowInTaskbar = false;
         TopMost = true;
         StartPosition = FormStartPosition.Manual;
-        BackColor = Color.FromArgb(30, 30, 46);
+        // 窗口真实形状由 ApplyShapeRegion 裁出圆角（避免矩形角在桌面/浅色背景下露出色块）
+        BackColor = _themeService.IsDark ? Color.FromArgb(30, 30, 46) : Color.FromArgb(239, 241, 245);
 
         Size = new Size(CardWidth, CardHeight);
 
@@ -95,6 +100,13 @@ public class FloatingWidget : Form
             var screen = Screen.PrimaryScreen!.WorkingArea;
             Location = new Point(screen.Right - CardWidth - 20, screen.Top + screen.Height / 2 - CardHeight / 2);
         }
+
+        // 分辨率变更/断开显示器后，保存的位置可能落在屏幕外：钳制回最近的工作区
+        ClampIntoNearestScreen();
+
+        // 恢复上次的贴边状态
+        if (config.SnapEdgeValue is >= 1 and <= 3)
+            RestoreSnappedState(config);
 
         // 右键菜单
         var menu = new ContextMenuStrip();
@@ -160,11 +172,57 @@ public class FloatingWidget : Form
     public void UpdateData(QuotaSnapshot snapshot)
     {
         _snapshot = snapshot;
-        if (InvokeRequired) BeginInvoke(() => Invalidate());
-        else Invalidate();
+        void Apply()
+        {
+            // 折叠态才挂 tooltip；展开态清空，避免气泡在卡片上重复可见数字
+            if (_isSnapped && !_isExpanded) ShowTip();
+            else HideTip();
+            Invalidate();
+        }
+        if (InvokeRequired) BeginInvoke(Apply);
+        else Apply();
+    }
+
+    /// <summary>悬浮窗折叠态才需要 tooltip；展开卡片时数字已可见，隐藏避免重复</summary>
+    private void ShowTip() => _tip.SetToolTip(this, BuildTooltip());
+    private void HideTip() => _tip.SetToolTip(this, "");
+
+    /// <summary>迷你条悬停提示内容（收起态唯一的数字出口）</summary>
+    private string BuildTooltip()
+    {
+        static string P(double v) => v > 0 && v < 10 ? $"{v:F1}%" : $"{v:F0}%";
+        var s = _snapshot;
+        // 离线快照保留的是最后一次成功数据的配额值，但 ResetDateTime 会逐渐过期，不再拼倒计时
+        string reset = !s.IsOffline && s.Token5hQuota.ResetDateTime is { } r
+            ? $"（{FormatResetCountdown(r)}）"
+            : "";
+        return $"MCP 配额 {P(s.McpQuota.Percentage)}\n" +
+               $"5h Token {P(s.Token5hQuota.Percentage)}{reset}\n" +
+               (s.IsOffline ? "离线 — 显示上次数据" : $"{s.Timestamp:HH:mm} 更新");
     }
 
     #region 绘制
+
+    protected override void OnResize(EventArgs e)
+    {
+        base.OnResize(e);
+        ApplyShapeRegion();
+    }
+
+    /// <summary>
+    /// 把窗口 Region 裁成当前状态的圆角形状：
+    /// 只靠 Paint 画圆角时，四个角落会露出矩形窗体的本底色块（毛刺），
+    /// Win10 没有 DWMWA_WINDOW_CORNER_PREFERENCE，只能用 Region 真实裁形
+    /// </summary>
+    private void ApplyShapeRegion()
+    {
+        if (Width <= 0 || Height <= 0) return;
+        float r = _isSnapped && !_isExpanded ? EdgeRadius : CardRadius;
+        using var path = GraphicsExtensions.MakeRoundRect(0, 0, Width, Height, r);
+        var old = Region;
+        Region = new Region(path);
+        old?.Dispose();
+    }
 
     private void OnPaint(object? sender, PaintEventArgs e)
     {
@@ -183,20 +241,20 @@ public class FloatingWidget : Form
     /// </summary>
     private void PaintFullCard(Graphics g, bool isDark, AppConfig cfg, int w, int h)
     {
-        // Catppuccin 颜色
+        // Catppuccin 颜色（页脚一档提到 subtext 级别，7.5pt 时代的低对比问题一并解决）
         Color bg = isDark ? Color.FromArgb(30, 30, 46) : Color.FromArgb(239, 241, 245);
         Color borderColor = isDark ? Color.FromArgb(49, 50, 68) : Color.FromArgb(204, 208, 218);
-        Color statColor = isDark ? Color.FromArgb(127, 132, 156) : Color.FromArgb(140, 143, 161);
-        Color footerColor = isDark ? Color.FromArgb(88, 91, 112) : Color.FromArgb(156, 160, 176);
+        Color statColor = isDark ? Color.FromArgb(127, 132, 156) : Color.FromArgb(108, 111, 133);
+        Color footerColor = isDark ? Color.FromArgb(110, 115, 141) : Color.FromArgb(122, 125, 148);
 
         // 背景
         using (var bgBrush = new SolidBrush(bg))
-        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w, h, 4))
+        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w, h, CardRadius))
             g.FillPath(bgBrush, path);
 
         // 边框
         using (var borderPen = new Pen(borderColor))
-        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w - 1, h - 1, 4))
+        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w - 1, h - 1, CardRadius))
             g.DrawPath(borderPen, path);
 
         int x = CardHPadding;
@@ -222,12 +280,12 @@ public class FloatingWidget : Form
         }
         y += 22;
 
-        // ═══ 底部行 ═══
+        // 页脚：离线时倒计时已过期失真，只保留右侧状态文本
         using var footerBrush = new SolidBrush(footerColor);
 
-        if (_snapshot.Token5hQuota.ResetDateTime.HasValue)
+        if (!_snapshot.IsOffline && _snapshot.Token5hQuota.ResetDateTime is { } reset)
         {
-            string resetText = $"重置 {_snapshot.Token5hQuota.ResetDateTime.Value:HH:mm}";
+            string resetText = FormatResetCountdown(reset);
             g.DrawString(resetText, _tinyFont, footerBrush, x, y);
         }
 
@@ -253,11 +311,11 @@ public class FloatingWidget : Form
         float labelY = y + (RowHeight - _labelFont.GetHeight(g)) / 2;
         g.DrawString(item.Name, _labelFont, labelBrush, labelX, labelY);
 
-        // 进度条
+        // 进度条（药丸形轨道）
         int barY = y + (RowHeight - BarHeight) / 2;
         Color barBg = isDark ? Color.FromArgb(49, 50, 68) : Color.FromArgb(204, 208, 218);
         using (var bgBrush = new SolidBrush(barBg))
-            g.FillRectangle(bgBrush, barX, barY, BarWidth, BarHeight);
+            g.FillRoundedRectangle(bgBrush, barX, barY, BarWidth, BarHeight, BarHeight / 2f);
 
         Color normalColor;
         if (item.Type == "TIME_LIMIT")
@@ -271,15 +329,29 @@ public class FloatingWidget : Form
         else pctColor = normalColor;
 
         int fillW = (int)(BarWidth * pct / 100);
+        if (pct > 0) fillW = Math.Max(fillW, 4); // 极小百分比也留可见填充
         if (fillW > 0)
         {
+            // 填充裁剪到轨道圆角路径内：短填充的左端自然跟随轨道曲线，
+            // 不再把左端直角"盖"到圆弧上（旧版看起来一边胶囊一边方角的原因）
+            using var trackPath = GraphicsExtensions.MakeRoundRect(barX, barY, BarWidth, BarHeight, BarHeight / 2f);
+            g.SetClip(trackPath);
+
             using var fillBrush = new SolidBrush(pctColor);
-            g.FillRectangle(fillBrush, barX, barY, fillW, BarHeight);
+            float radius = Math.Min(BarHeight / 2f, fillW / 2f);
+            g.FillRoundedRectangle(fillBrush, barX, barY, fillW, BarHeight, radius);
+
+            // 顶部 1px 内高光：给纯色药丸一点立体感（对深浅色/任意填充色通用）
+            if (fillW > radius * 2)
+                using (var gloss = new Pen(Color.FromArgb(70, Color.White), 1f))
+                    g.DrawLine(gloss, barX + radius, barY + 1.5f, barX + fillW - radius, barY + 1.5f);
+
+            g.ResetClip();
         }
 
-        // 百分比（右对齐）
+        // 百分比（右对齐；<10% 显示一位小数，避免 7.5% 被四舍五入成误导性的 8%/0%）
         using var pctBrush = new SolidBrush(pctColor);
-        string pctText = $"{pct:F0}%";
+        string pctText = pct > 0 && pct < 10 ? $"{pct:F1}%" : $"{pct:F0}%";
         var pctSize = g.MeasureString(pctText, _valueFont);
         float pctDrawX = pctX + PctColWidth - pctSize.Width;
         float pctDrawY = y + (RowHeight - pctSize.Height) / 2;
@@ -386,15 +458,37 @@ public class FloatingWidget : Form
     {
         if (e.Button != MouseButtons.Left) return;
 
+        _hideTimer.Stop();
         _isDragging = true;
-        _dragOffset = e.Location;
+
         if (_isSnapped)
         {
+            // 从迷你条展开为卡片时按光标相对比例重新锚定，避免卡片"跳"到光标右下方
+            var cursor = Cursor.Position;
+            float relX = Width > 0 ? e.Location.X / (float)Width : 0f;
+            float relY = Height > 0 ? e.Location.Y / (float)Height : 0f;
+
             _isSnapped = false;
             _isExpanded = false;
             _snapEdge = DockStyle.None;
+            HideTip();
             Size = new Size(CardWidth, CardHeight);
+
+            int newX = cursor.X - (int)(CardWidth * relX);
+            int newY = cursor.Y - (int)(CardHeight * relY);
+            var area = Screen.FromPoint(cursor).WorkingArea;
+            newX = Math.Clamp(newX, area.Left + EdgeMarginScreen, area.Right - CardWidth - EdgeMarginDesktop);
+            newY = Math.Clamp(newY, area.Top + EdgeMarginScreen, area.Bottom - CardHeight);
+            Location = new Point(newX, newY);
+
+            // 以卡片新位置重新计算拖拽偏移
+            _dragOffset = PointToClient(cursor);
+            BackColor = _themeService.IsDark ? Color.FromArgb(30, 30, 46) : Color.FromArgb(239, 241, 245);
+            Invalidate();
+            return;
         }
+
+        _dragOffset = e.Location;
     }
 
     private void OnMouseMove(object? sender, MouseEventArgs e)
@@ -409,7 +503,10 @@ public class FloatingWidget : Form
         if (!_isDragging) return;
         _isDragging = false;
 
-        var screen = Screen.PrimaryScreen!.WorkingArea;
+        // 用窗口中心所在的屏幕判断吸附，支持多显示器
+        var center = new Point(Location.X + Width / 2, Location.Y + Height / 2);
+        var screen = Screen.FromPoint(center).WorkingArea;
+
         if (Location.X <= screen.Left + EdgeSnapThreshold)
             SnapToEdge(DockStyle.Left, screen);
         else if (Location.X + Width >= screen.Right - EdgeSnapThreshold)
@@ -423,25 +520,63 @@ public class FloatingWidget : Form
     #endregion
 
     /// <summary>
-    /// 定位浮动条：从贴边位置展开 3 秒后收回
+    /// 定位浮动条：贴边收起时展开 3 秒后收回；窗口因显示器变更等原因不可见时，拉回主屏默认位置
     /// </summary>
     public void Locate()
     {
-        if (!_isSnapped || _isExpanded) return;
-
-        Expand();
-
-        var locateTimer = new System.Windows.Forms.Timer { Interval = 3000 };
-        locateTimer.Tick += (_, _) =>
+        if (_isSnapped && !_isExpanded)
         {
-            locateTimer.Stop();
-            locateTimer.Dispose();
+            Expand();
+            StartCollapseTimer();
+            return;
+        }
+        if (_isSnapped && _isExpanded) return;
+
+        // 未贴边但窗口与任何工作区几乎无交集时，移回主屏右缘中部（用未变异的工作区计算）
+        var current = new Rectangle(Location, Size);
+        bool visibleEnough =
+            Screen.AllScreens.Any(s => Rectangle.Intersect(s.WorkingArea, current).Width >= Width / 2 &&
+                                       Rectangle.Intersect(s.WorkingArea, current).Height >= Height / 2);
+        if (!visibleEnough)
+        {
+            var primary = Screen.PrimaryScreen!.WorkingArea;
+            Location = new Point(primary.Right - CardWidth - 20,
+                                 primary.Top + primary.Height / 2 - CardHeight / 2);
+        }
+    }
+
+    /// <summary>3 秒后收回贴边展开的卡片</summary>
+    private void StartCollapseTimer()
+    {
+        var timer = new System.Windows.Forms.Timer { Interval = 3000 };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            timer.Dispose();
             CollapseIfSnapped();
         };
-        locateTimer.Start();
+        timer.Start();
     }
 
     #region 贴边吸附
+
+    /// <summary>给定边缘与工作区，返回迷你条的 (位置, 尺寸)</summary>
+    private (Point loc, Size size) EdgeGeometry(DockStyle edge, Rectangle screen)
+    {
+        return edge switch
+        {
+            DockStyle.Right => (
+                new Point(screen.Right - (EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen), Math.Clamp(Location.Y, screen.Top, screen.Bottom - EdgeStripVHeight)),
+                new Size(EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen, EdgeStripVHeight)),
+            DockStyle.Left => (
+                new Point(screen.Left, Math.Clamp(Location.Y, screen.Top, screen.Bottom - EdgeStripVHeight)),
+                new Size(EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen, EdgeStripVHeight)),
+            _ => // Top
+                (
+                new Point(Math.Clamp(Location.X, screen.Left, screen.Right - EdgeStripHWidth), screen.Top),
+                new Size(EdgeStripHWidth, EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen))
+        };
+    }
 
     private void SnapToEdge(DockStyle edge, Rectangle screen)
     {
@@ -449,40 +584,49 @@ public class FloatingWidget : Form
         _snapEdge = edge;
         _isExpanded = false;
 
-        int currentX = Location.X;
-        int currentY = Location.Y;
-
-        switch (edge)
-        {
-            case DockStyle.Right:
-                Size = new Size(EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen, EdgeStripVHeight);
-                Location = new Point(screen.Right - Width, Math.Clamp(currentY, screen.Top, screen.Bottom - Height));
-                break;
-            case DockStyle.Left:
-                Size = new Size(EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen, EdgeStripVHeight);
-                Location = new Point(screen.Left, Math.Clamp(currentY, screen.Top, screen.Bottom - Height));
-                break;
-            case DockStyle.Top:
-                Size = new Size(EdgeStripHWidth, EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen);
-                Location = new Point(Math.Clamp(currentX, screen.Left, screen.Right - Width), screen.Top);
-                break;
-        }
+        var (loc, size) = EdgeGeometry(edge, screen);
+        Location = loc;
+        Size = size;
 
         BackColor = _themeService.IsDark
             ? Color.FromArgb(24, 24, 37)
             : Color.FromArgb(230, 233, 239);
 
         Invalidate();
+        PersistPosition();
+    }
+
+    /// <summary>启动时从配置恢复贴边状态</summary>
+    private void RestoreSnappedState(AppConfig config)
+    {
+        _snapEdge = (DockStyle)config.SnapEdgeValue;
+        if (_snapEdge is not (DockStyle.Left or DockStyle.Right or DockStyle.Top)) return;
+
+        if (config.SnapPosition.HasValue)
+        {
+            // 先把主定位放进去，让 EdgeGeometry 的钳制基于合理坐标
+            Location = config.SnapPosition.Value switch
+            {
+                int y when _snapEdge is DockStyle.Left or DockStyle.Right => new Point(Location.X, y),
+                int x => new Point(x, Location.Y)
+            };
+        }
+        var area = Screen.FromPoint(Location).WorkingArea;
+        var (loc, size) = EdgeGeometry(_snapEdge, area);
+        _isSnapped = true;
+        Location = loc;
+        Size = size;
+        BackColor = _themeService.IsDark ? Color.FromArgb(24, 24, 37) : Color.FromArgb(230, 233, 239);
     }
 
     private void Expand()
     {
         if (!_isSnapped) return;
         _isExpanded = true;
+        HideTip();
 
         Size = new Size(CardWidth, CardHeight);
-
-        var screen = Screen.PrimaryScreen!.WorkingArea;
+        var screen = Screen.FromPoint(new Point(Location.X + Width / 2, Location.Y)).WorkingArea;
         switch (_snapEdge)
         {
             case DockStyle.Left: Location = new Point(screen.Left + EdgeMarginScreen, Location.Y); break;
@@ -497,26 +641,12 @@ public class FloatingWidget : Form
     {
         if (!_isSnapped || !_isExpanded) return;
         _isExpanded = false;
+        ShowTip();
 
-        var screen = Screen.PrimaryScreen!.WorkingArea;
-        int currentX = Location.X;
-        int currentY = Location.Y;
-
-        switch (_snapEdge)
-        {
-            case DockStyle.Right:
-                Size = new Size(EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen, EdgeStripVHeight);
-                Location = new Point(screen.Right - Width, Math.Clamp(currentY, screen.Top, screen.Bottom - Height));
-                break;
-            case DockStyle.Left:
-                Size = new Size(EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen, EdgeStripVHeight);
-                Location = new Point(screen.Left, Math.Clamp(currentY, screen.Top, screen.Bottom - Height));
-                break;
-            case DockStyle.Top:
-                Size = new Size(EdgeStripHWidth, EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen);
-                Location = new Point(Math.Clamp(currentX, screen.Left, screen.Right - Width), screen.Top);
-                break;
-        }
+        var area = Screen.FromPoint(Location).WorkingArea;
+        var (loc, size) = EdgeGeometry(_snapEdge, area);
+        Location = loc;
+        Size = size;
 
         BackColor = _themeService.IsDark
             ? Color.FromArgb(24, 24, 37)
@@ -527,14 +657,27 @@ public class FloatingWidget : Form
 
     #endregion
 
+    /// <summary>把窗口钳制回最近屏幕的工作区（应对分辨率变更、显示器拔插）</summary>
+    private void ClampIntoNearestScreen()
+    {
+        var area = Screen.FromPoint(Location).WorkingArea;
+        int x = Math.Clamp(Location.X, area.Left, Math.Max(area.Left, area.Right - Width));
+        int y = Math.Clamp(Location.Y, area.Top, Math.Max(area.Top, area.Bottom - Height));
+        if (x != Location.X || y != Location.Y)
+            Location = new Point(x, y);
+    }
+
     private void PersistPosition()
     {
-        if (_isSnapped) return;
         try
         {
             var config = _configService.Config;
             config.FloatingBarX = Location.X;
             config.FloatingBarY = Location.Y;
+            config.SnapEdgeValue = _isSnapped ? (int)_snapEdge : 0;
+            config.SnapPosition = _isSnapped
+                ? (_snapEdge is DockStyle.Left or DockStyle.Right ? Location.Y : Location.X)
+                : null;
             _configService.Save(config);
         }
         catch { }
@@ -546,6 +689,16 @@ public class FloatingWidget : Form
         if (n >= 1_000_000) return $"{n / 1_000_000.0:F1}M";
         if (n >= 1_000) return $"{n / 1_000.0:F1}K";
         return n.ToString();
+    }
+
+    /// <summary>把重置时间格式化为紧凑倒计时（页面按轮询间隔刷新，分钟级误差可接受）</summary>
+    private static string FormatResetCountdown(DateTime target)
+    {
+        var span = target - DateTime.Now;
+        if (span <= TimeSpan.Zero) return "即将重置";
+        if (span.TotalDays >= 1) return $"{(int)span.TotalDays}d{span.Hours}h 后重置";
+        if (span.TotalHours >= 1) return $"{span.Hours}h{span.Minutes:D2}m 后重置";
+        return $"{Math.Max(1, span.Minutes)}m 后重置";
     }
 
     private static string FormatTokenUsage(long tokens)
@@ -561,6 +714,7 @@ public class FloatingWidget : Form
         if (disposing)
         {
             _hideTimer.Dispose();
+            _tip.Dispose();
             _themeService.ThemeChanged -= _themeChangedHandler;
             _labelFont.Dispose();
             _valueFont.Dispose();

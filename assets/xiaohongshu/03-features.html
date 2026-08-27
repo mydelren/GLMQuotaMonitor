@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  width:1080px; height:1440px; position:relative; overflow:hidden;
+  font-family:"Microsoft YaHei UI","PingFang SC",sans-serif;
+  background:linear-gradient(170deg,#F2FBFF 0%,#F6EEFF 60%,#FBF1FF 100%);
+}
+.blob { position:absolute; border-radius:50%; filter:blur(80px); opacity:.5; }
+.b1 { width:440px;height:440px; background:#CDEBFF; top:-150px; right:-130px; }
+.b2 { width:400px;height:400px; background:#E7D5FF; bottom:-140px; left:-120px; }
+.wrap { position:relative; z-index:2; height:100%; display:flex; flex-direction:column; padding:64px 72px 46px; }
+.kicker { display:flex; align-items:center; gap:14px; font-size:27px; color:#7E76A8; font-weight:600; letter-spacing:2px;}
+.kicker .bar { width:44px; height:8px; border-radius:99px; background:#7FB9FF; }
+.title { margin-top:16px; font-size:68px; font-weight:900; color:#28304A; letter-spacing:1px;}
+.title em { font-style:normal; color:#3D74FF; }
+.grid { margin-top:52px; display:grid; grid-template-columns:1fr 1fr; gap:30px; }
+.card {
+  background:rgba(255,255,255,.93); border-radius:26px; padding:34px 32px;
+  box-shadow:0 16px 36px rgba(70,110,190,.10); border:2px solid rgba(255,255,255,.9);
+}
+.ico { width:78px;height:78px;border-radius:22px; display:flex;align-items:center;justify-content:center; font-size:42px; margin-bottom:20px;}
+.c1 .ico{background:#E4F0FF}.c2 .ico{background:#FFF0E1}.c3 .ico{background:#EDDFFF}
+.c4 .ico{background:#FFE4EC}.c5 .ico{background:#DFF7EA}.c6 .ico{background:#FFF8D6}
+.card b { font-size:34px; color:#2A3050; letter-spacing:.5px;}
+.card p { margin-top:12px; font-size:25px; line-height:1.45; color:#79839B; }
+.mini-demo {
+  margin-top:44px; background:rgba(255,255,255,.85); border-radius:24px;
+  padding:26px 36px; box-shadow:0 14px 32px rgba(70,110,190,.10);
+  display:flex; align-items:center; gap:30px;
+}
+.md-label { font-size:26px; font-weight:700; color:#41508A; white-space:nowrap; }
+.strip {
+  position:relative; height:80px; border-radius:8px; background:#181823;
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.05);
+  padding:5px 3px 5px 8px; display:flex; gap:4px;
+}
+.seg { width:11px; border-radius:4px; background:#31313F; position:relative; overflow:hidden; }
+.seg i { position:absolute; left:1px; right:1px; bottom:1px; border-radius:3px; }
+.seg.a i { height:26%; background:#89B4F6; }
+.seg.b i { height:62%; background:#F9E2AF; }
+.md-text { font-size:24px; color:#8B94AC; line-height:1.5; }
+.footer { margin-top:auto; display:flex; justify-content:space-between; align-items:flex-end; }
+.tip { font-size:27px; color:#92A0BE; font-weight:500; }
+.pageno { font-size:25px; color:#A9BCDC; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="blob b1"></div><div class="blob b2"></div>
+<div class="wrap">
+  <div class="kicker"><span class="bar"></span>功能清单 FEATURES</div>
+  <div class="title">小而美，<em>六个贴心功能</em> 🛠</div>
+
+  <div class="grid">
+    <div class="card c1"><div class="ico">📌</div><b>贴边吸附</b><p>拖到屏幕边缘收成迷你条，悬停即展开，贴边状态还会记忆</p></div>
+    <div class="card c2"><div class="ico">🔔</div><b>超额预警</b><p>托盘图标变黄变红 + 弹窗提醒，同一窗口只提醒一次不轰炸</p></div>
+    <div class="card c3"><div class="ico">⏱️</div><b>重置倒计时</b><p>还有多久回血一眼锁定，配合 5h 流控规划用量</p></div>
+    <div class="card c4"><div class="ico">🌗</div><b>深浅双主题</b><p>Catppuccin 配色，跟随系统自动切换，设置窗全控件适配</p></div>
+    <div class="card c5"><div class="ico">🖥️</div><b>多显示器</b><p>吸附按窗口所在屏幕计算，显示器拔插可一键拉回</p></div>
+    <div class="card c6"><div class="ico">🚀</div><b>开机自启</b><p>一次配置永久省心，托盘常驻不到 70MB 内存</p></div>
+  </div>
+
+  <div class="mini-demo">
+    <div class="md-label">收起后长这样 👉</div>
+    <div class="strip">
+      <div class="seg a"><i></i></div>
+      <div class="seg b"><i></i></div>
+      <div style="flex:1;"></div>
+    </div>
+    <div class="md-text">两条迷你进度条<br>悬停显示数字气泡</div>
+  </div>
+
+  <div class="footer">
+    <div class="tip">💡 示意图：实际为屏幕最右缘的竖版迷你条</div>
+    <div class="pageno">03</div>
+  </div>
+</div>
+</body>
+</html>

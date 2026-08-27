@@ -6,54 +6,31 @@ namespace GLMQuotaMonitor;
 /// <summary>
 /// 配置管理服务
 /// 负责配置的读取、保存和热重载
-/// 配置文件优先存放在 exe 同目录（绿色模式），写入失败则回退到 %AppData%
 /// </summary>
 public class ConfigService
 {
-    private static readonly string ConfigDir;
-    private static readonly string ConfigPath;
+    /// <summary>
+    /// 配置目录覆盖（--config-dir 启动参数），用于便携模式与多实例调试；
+    /// 注意 SpecialFolder.ApplicationData 不受 APPDATA 环境变量影响，隔离必须走显式目录
+    /// </summary>
+    public static string? DirOverride { get; set; }
+
+    // 必须是计算属性：static readonly 初始化会在首次触碰类型时执行，
+    // 那时 Main 对 DirOverride 的赋值还没发生，覆盖会被静默丢弃
+    private static string ConfigDir => DirOverride
+        ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GLMQuotaMonitor");
+
+    // 同上：依赖 ConfigDir 的路径也必须每次现算，否则会在类型初始化时被固化为默认目录
+    private static string ConfigPath => Path.Combine(ConfigDir, "config.json");
+
+    /// <summary>当前生效的配置文件完整路径（诊断用）</summary>
+    public static string CurrentConfigPath => ConfigPath;
 
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
         WriteIndented = true,
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase
     };
-
-    static ConfigService()
-    {
-        // 优先 exe 同目录（绿色模式，删 exe 零残留）
-        string exeDir = AppContext.BaseDirectory;
-        string localPath = Path.Combine(exeDir, "config.json");
-
-        if (CanWriteToDir(exeDir))
-        {
-            ConfigDir = exeDir;
-            ConfigPath = localPath;
-        }
-        else
-        {
-            // 受保护目录（如 Program Files），回退到 %AppData%
-            ConfigDir = Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "GLMQuotaMonitor");
-            ConfigPath = Path.Combine(ConfigDir, "config.json");
-        }
-    }
-
-    private static bool CanWriteToDir(string dir)
-    {
-        try
-        {
-            string testFile = Path.Combine(dir, $".write_test_{Guid.NewGuid():N}");
-            File.WriteAllText(testFile, "");
-            File.Delete(testFile);
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
 
     private AppConfig _config;
 
@@ -64,9 +41,6 @@ public class ConfigService
 
     /// <summary>当前配置</summary>
     public AppConfig Config => _config;
-
-    /// <summary>配置文件所在目录（供外部显示）</summary>
-    public static string ConfigDirectory => ConfigDir;
 
     /// <summary>配置变更事件</summary>
     public event Action<AppConfig>? ConfigChanged;
@@ -88,6 +62,14 @@ public class ConfigService
                     return _config;
                 }
             }
+            else if (Environment.GetEnvironmentVariable("GLMQM_DEBUG") is "1")
+            {
+                SafeDebugLog($"[Load] config not found: {ConfigPath}");
+            }
+        }
+        catch (JsonException ex) when (Environment.GetEnvironmentVariable("GLMQM_DEBUG") is "1")
+        {
+            SafeDebugLog($"[Load] JsonException: {ex.Message}");
         }
         catch (JsonException)
         {
@@ -100,6 +82,18 @@ public class ConfigService
 
         _config = new AppConfig();
         return _config;
+    }
+
+    /// <summary>调试日志（设 GLMQM_DEBUG=1 环境变量启用），写 %TEMP%\glmqm-debug.log</summary>
+    internal static void SafeDebugLog(string message)
+    {
+        if (Environment.GetEnvironmentVariable("GLMQM_DEBUG") is not "1") return;
+        try
+        {
+            File.AppendAllText(Path.Combine(Path.GetTempPath(), "glmqm-debug.log"),
+                $"[{DateTime.Now:HH:mm:ss.fff}] {message}\n");
+        }
+        catch { }
     }
 
     /// <summary>

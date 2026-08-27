@@ -20,6 +20,8 @@ public class SettingsForm : Form
     private NumericUpDown _nudWarning = null!;
     private NumericUpDown _nudCritical = null!;
     private bool _tokenVisible;
+    /// <summary>当前主题标记，供下拉框自绘使用（默认深色与启动主题一致）</summary>
+    private bool _darkMode = true;
 
     public SettingsForm(ConfigService configService, ThemeService themeService)
     {
@@ -33,6 +35,34 @@ public class SettingsForm : Form
         ApplyTheme(_themeService.IsDark);
     }
 
+    /// <summary>
+    /// 深浅色通用的下拉框自绘：WinForms 原生 ComboBox 的列表区不吃 BackColor，
+    /// 不自绘的话深色模式下会保持刺眼的系统浅色
+    /// </summary>
+    private void ComboDrawItem(object? sender, DrawItemEventArgs e)
+    {
+        if (e.Index < 0 || sender is not ComboBox combo) return;
+
+        bool selected = (e.State & DrawItemState.Selected) == DrawItemState.Selected;
+        Color bg = _darkMode ? Color.FromArgb(40, 40, 60) : Color.White;
+        Color fg = _darkMode ? Color.FromArgb(224, 224, 224) : Color.FromArgb(30, 30, 30);
+        if (selected)
+        {
+            // 浅色高亮底配白字才有足够对比；深色用同系浅一档
+            bg = _darkMode ? Color.FromArgb(69, 71, 90) : SystemColors.Highlight;
+            fg = _darkMode ? Color.White : SystemColors.HighlightText;
+        }
+
+        using var brush = new SolidBrush(bg);
+        e.Graphics.FillRectangle(brush, e.Bounds);
+        TextRenderer.DrawText(e.Graphics, combo.GetItemText(combo.Items[e.Index]),
+            e.Font ?? Font, e.Bounds, fg,
+            TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+
+        if ((e.State & DrawItemState.Focus) == DrawItemState.Focus)
+            e.DrawFocusRectangle();
+    }
+
     private void InitializeUI()
     {
         Text = "GLM 配额监控 - 设置";
@@ -40,14 +70,18 @@ public class SettingsForm : Form
         MaximizeBox = false;
         MinimizeBox = false;
         StartPosition = FormStartPosition.CenterScreen;
-        ClientSize = new Size(420, 430);
+        ClientSize = new Size(420, 392);
         ShowInTaskbar = false;
         TopMost = true;
 
-        int y = 16;
+        // 分区化布局：监控 / 外观与行为 / 预警阈值，替代原先两条无标题分隔线
+        int y = 14;
         int labelX = 16;
         int inputX = 120;
         int inputWidth = 270;
+
+        Controls.Add(CreateSection("监控", labelX, y));
+        y += 24;
 
         // API Key
         Controls.Add(CreateLabel("API Key:", labelX, y));
@@ -75,19 +109,20 @@ public class SettingsForm : Form
             _btnToggleToken.Text = _tokenVisible ? "🔒" : "👁";
         };
         Controls.Add(_btnToggleToken);
-        y += 36;
-
-        // 平台
+        y += 34;
         Controls.Add(CreateLabel("平台:", labelX, y));
         _cmbPlatform = new ComboBox
         {
             Location = new Point(inputX, y),
             Size = new Size(inputWidth, 24),
-            DropDownStyle = ComboBoxStyle.DropDownList
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            DrawMode = DrawMode.OwnerDrawFixed,
+            FlatStyle = FlatStyle.Flat
         };
+        _cmbPlatform.DrawItem += ComboDrawItem;
         _cmbPlatform.Items.AddRange(new object[] { "自动检测", "智谱 AI", "智谱 AI (dev)", "Z.ai" });
         Controls.Add(_cmbPlatform);
-        y += 36;
+        y += 34;
 
         // 轮询间隔
         Controls.Add(CreateLabel("轮询间隔:", labelX, y));
@@ -101,7 +136,10 @@ public class SettingsForm : Form
         };
         Controls.Add(_nudPolling);
         Controls.Add(CreateLabel("分钟", inputX + 86, y + 3));
-        y += 36;
+        y += 32;
+
+        Controls.Add(CreateSection("外观与行为", labelX, y));
+        y += 24;
 
         // 主题
         Controls.Add(CreateLabel("主题:", labelX, y));
@@ -109,11 +147,14 @@ public class SettingsForm : Form
         {
             Location = new Point(inputX, y),
             Size = new Size(inputWidth, 24),
-            DropDownStyle = ComboBoxStyle.DropDownList
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            DrawMode = DrawMode.OwnerDrawFixed,
+            FlatStyle = FlatStyle.Flat
         };
+        _cmbTheme.DrawItem += ComboDrawItem;
         _cmbTheme.Items.AddRange(new object[] { "跟随系统", "深色", "浅色" });
         Controls.Add(_cmbTheme);
-        y += 36;
+        y += 32;
 
         // 浮动条
         _chkFloatingBar = new CheckBox
@@ -123,16 +164,10 @@ public class SettingsForm : Form
             Size = new Size(inputWidth, 24)
         };
         Controls.Add(_chkFloatingBar);
-        y += 40;
+        y += 30;
 
-        // 分隔线
-        Controls.Add(new Panel
-        {
-            BackColor = Color.FromArgb(200, 200, 210),
-            Location = new Point(16, y),
-            Size = new Size(388, 1)
-        });
-        y += 12;
+        Controls.Add(CreateSection("预警阈值", labelX, y));
+        y += 24;
 
         // 警告阈值
         Controls.Add(CreateLabel("警告阈值:", labelX, y));
@@ -160,16 +195,7 @@ public class SettingsForm : Form
         };
         Controls.Add(_nudCritical);
         Controls.Add(CreateLabel("%  (图标变红, 弹通知)", inputX + 86, y + 3));
-        y += 40;
-
-        // 分隔线
-        Controls.Add(new Panel
-        {
-            BackColor = Color.FromArgb(200, 200, 210),
-            Location = new Point(16, y),
-            Size = new Size(388, 1)
-        });
-        y += 16;
+        y += 38;
 
         // 按钮
         var btnSave = new Button
@@ -205,6 +231,18 @@ public class SettingsForm : Form
             Location = new Point(x, y + 3),
             AutoSize = true,
             Font = new Font("Microsoft YaHei UI", 9f)
+        };
+    }
+
+    /// <summary>分区标题（加粗），替代旧版无标题分隔线</summary>
+    private static Label CreateSection(string text, int x, int y)
+    {
+        return new Label
+        {
+            Text = text,
+            Location = new Point(x, y),
+            AutoSize = true,
+            Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Bold)
         };
     }
 
@@ -247,9 +285,11 @@ public class SettingsForm : Form
             ShowFloatingBar = _chkFloatingBar.Checked,
             WarningThreshold = (int)_nudWarning.Value,
             CriticalThreshold = (int)_nudCritical.Value,
-            // 保留浮动条位置（由 FloatingBar 自行更新）
+            // 保留浮动条位置与贴边状态（由 FloatingBar 自行更新）
             FloatingBarX = _configService.Config.FloatingBarX,
-            FloatingBarY = _configService.Config.FloatingBarY
+            FloatingBarY = _configService.Config.FloatingBarY,
+            SnapEdgeValue = _configService.Config.SnapEdgeValue,
+            SnapPosition = _configService.Config.SnapPosition
         };
 
         _configService.Save(config);
@@ -267,11 +307,12 @@ public class SettingsForm : Form
 
     private void ApplyTheme(bool isDark)
     {
+        _darkMode = isDark;
+
         Color bg = isDark ? Color.FromArgb(30, 30, 46) : Color.FromArgb(245, 245, 250);
         Color fg = isDark ? Color.FromArgb(224, 224, 224) : Color.FromArgb(30, 30, 30);
         Color inputBg = isDark ? Color.FromArgb(40, 40, 60) : Color.White;
         Color btnBg = isDark ? Color.FromArgb(49, 50, 68) : Color.FromArgb(230, 230, 235);
-        Color sepColor = isDark ? Color.FromArgb(69, 71, 90) : Color.FromArgb(200, 200, 210);
 
         BackColor = bg;
         ForeColor = fg;
@@ -287,21 +328,29 @@ public class SettingsForm : Form
                 case NumericUpDown nud:
                     nud.BackColor = inputBg;
                     nud.ForeColor = fg;
+                    // NumericUpDown 的文本区是内部 TextBox，不一起改色会保持系统白色
+                    foreach (Control child in nud.Controls)
+                        if (child is TextBox inner)
+                        {
+                            inner.BackColor = inputBg;
+                            inner.ForeColor = fg;
+                        }
                     break;
                 case ComboBox cmb:
                     cmb.BackColor = inputBg;
                     cmb.ForeColor = fg;
+                    cmb.Invalidate();
                     break;
                 case Button btn:
                     btn.FlatStyle = FlatStyle.Flat;
                     btn.BackColor = btnBg;
                     btn.ForeColor = fg;
+                    btn.FlatAppearance.MouseOverBackColor = isDark
+                        ? Color.FromArgb(69, 71, 90)
+                        : Color.FromArgb(215, 215, 222);
                     break;
                 case CheckBox chk:
                     chk.ForeColor = fg;
-                    break;
-                case Panel p when p.Height == 1:
-                    p.BackColor = sepColor;
                     break;
             }
         }

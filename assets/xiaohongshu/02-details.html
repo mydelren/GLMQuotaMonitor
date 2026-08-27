@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  width:1080px; height:1440px; position:relative; overflow:hidden;
+  font-family:"Microsoft YaHei UI","PingFang SC",sans-serif;
+  background:linear-gradient(200deg,#FFF6EC 0%,#F5EBFF 55%,#EDE2FF 100%);
+}
+.blob { position:absolute; border-radius:50%; filter:blur(80px); opacity:.5; }
+.b1 { width:460px;height:460px; background:#FFE0C7; top:-160px; left:-140px; }
+.b2 { width:400px;height:400px; background:#DCC9FF; bottom:-140px; right:-120px; }
+.wrap { position:relative; z-index:2; height:100%; display:flex; flex-direction:column; padding:64px 72px 46px; }
+.head { display:flex; flex-direction:column; gap:16px; }
+.kicker { display:flex; align-items:center; gap:14px; font-size:27px; color:#8A76B5; font-weight:600; letter-spacing:2px;}
+.kicker .bar { width:44px; height:8px; border-radius:99px; background:#B79BFF; }
+.title { font-size:68px; font-weight:900; color:#2B2438; letter-spacing:1px; }
+.title em { font-style:normal; color:#8A4BFF; }
+.rows { margin-top:48px; display:flex; flex-direction:column; gap:44px; }
+.row { display:flex; align-items:center; gap:40px; }
+.window {
+  background:#FFFFFF; border-radius:22px; padding:14px 14px 10px;
+  box-shadow:0 20px 45px rgba(105,70,190,.15); flex-shrink:0;
+}
+.win-bar { display:flex; gap:8px; padding:2px 4px 10px; }
+.win-bar i { width:14px;height:14px;border-radius:50%; }
+.win-bar i:nth-child(1){background:#FF8A80}.win-bar i:nth-child(2){background:#FFD180}.win-bar i:nth-child(3){background:#8CE99A}
+.plate { background:#1B1B2B; border-radius:14px; overflow:hidden; }
+.plate img { display:block; width:480px; height:auto; }
+.callouts { display:flex; flex-direction:column; gap:26px; min-width:0; }
+.co { background:rgba(255,255,255,.88); border-left:8px solid #A87FFF; border-radius:16px;
+      padding:18px 24px; box-shadow:0 10px 26px rgba(110,75,190,.10); }
+.co b { display:block; font-size:31px; color:#33294A; margin-bottom:6px; letter-spacing:.5px;}
+.co span { font-size:25px; color:#837696; line-height:1.35; }
+.hl { background:linear-gradient(transparent 60%, #FFEBB0 60%); font-weight:700; color:#33294A; }
+.footer { margin-top:auto; display:flex; justify-content:space-between; align-items:flex-end; }
+.tip { font-size:27px; color:#9A8DB8; font-weight:500; }
+.pageno { font-size:25px; color:#B7A9D9; font-weight:700; }
+</style>
+</head>
+<body>
+<div class="blob b1"></div><div class="blob b2"></div>
+<div class="wrap">
+  <div class="head">
+    <div class="kicker"><span class="bar"></span>细节控狂喜 DETAIL</div>
+    <div class="title">像素级打磨，<em>深浅都耐看</em> ✨</div>
+  </div>
+
+  <div class="rows">
+    <div class="row">
+      <div class="window">
+        <div class="win-bar"><i></i><i></i><i></i></div>
+        <div class="plate"><img src="../../images/widget-dark.png" alt=""></div>
+      </div>
+      <div class="callouts">
+        <div class="co"><b>💊 药丸进度条</b><span>圆角轨道 + 顶部内高光，纯 GDI+ 手绘</span></div>
+        <div class="co"><b><span class="hl">一位小数</span> 才诚实</b><span>7.6% 就显示 7.6%，不再四舍五入骗人</span></div>
+      </div>
+    </div>
+
+    <div class="row" style="flex-direction:row-reverse;">
+      <div class="window">
+        <div class="win-bar"><i></i><i></i><i></i></div>
+        <div class="plate"><img src="../../images/widget-light.png" alt=""></div>
+      </div>
+      <div class="callouts">
+        <div class="co"><b>⏱ 重置倒计时</b><span>3h46m 后重置 —— 回血时间一眼锁定</span></div>
+        <div class="co"><b>🌗 双主题跟随系统</b><span>Catppuccin Mocha / Latte 自动切换</span></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="footer">
+    <div class="tip">💡 从代码到本页排版，全由 GLM-5.3-Flash 一手调教 ⚡</div>
+    <div class="pageno">02</div>
+  </div>
+</div>
+</body>
+</html>

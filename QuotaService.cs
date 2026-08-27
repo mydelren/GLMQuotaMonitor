@@ -20,9 +20,12 @@ public class QuotaService : IDisposable
     };
 
     private readonly HttpClient _http;
+    /// <summary>串行化网络请求，避免手动刷新与轮询周期并发写 _lastSnapshot</summary>
+    private readonly SemaphoreSlim _fetchGate = new(1, 1);
+    /// <summary>轮询生命周期令牌：线程安全地 Cancel+换新，永远不因 Dispose 竞态抛 ODE</summary>
     private readonly SafeCancellationTokenSource _pollCts = new();
     private int _consecutiveFailures;
-    private volatile bool _enteredBackoff;
+    private bool _enteredBackoff;
     private QuotaSnapshot _lastSnapshot = new() { IsOffline = true };
 
     public QuotaService()
@@ -37,7 +40,7 @@ public class QuotaService : IDisposable
     public event Action<string>? Error;
 
     /// <summary>
-    /// 启动轮询（线程安全，可重复调用）
+    /// 启动轮询（线程安全，可重复调用）；连续失败进入指数退避（封顶 30 分钟），不再永久停摆
     /// </summary>
     public void StartPolling(int intervalMinutes, Func<string> tokenGetter, Func<string> baseUrlGetter)
     {
@@ -66,13 +69,13 @@ public class QuotaService : IDisposable
                             _enteredBackoff = true;
                             Error?.Invoke("连续失败，已进入退避重试模式");
                         }
+                        // 指数退避：每多失败一轮翻一倍，封顶 30 分钟
                         int shift = Math.Min(_consecutiveFailures - MaxRetryCount, 20);
-                        int retryDelay = (int)Math.Min((long)intervalMs * (1L << shift), 30L * 60 * 1000);
+                        int retryDelay = (int)Math.Min((long)intervalMs * (1L << shift), 30L * 60L * 1000L);
                         await Task.Delay(retryDelay, token);
                     }
                     else
                     {
-                        _enteredBackoff = false;
                         await Task.Delay(intervalMs, token);
                     }
                 }
@@ -85,11 +88,12 @@ public class QuotaService : IDisposable
     }
 
     /// <summary>
-    /// 停止轮询
+    /// 停止当前轮询周期（原子换新 CTS，旧的会被取消并安全释放）
     /// </summary>
     public void StopPolling()
     {
         _pollCts.CancelAndRecreate();
+        _enteredBackoff = false;
     }
 
     /// <summary>
@@ -109,29 +113,43 @@ public class QuotaService : IDisposable
     /// </summary>
     public QuotaSnapshot GetLastSnapshot() => _lastSnapshot;
 
+    /// <summary>演示模式：跳过网络，输出固定的示例数据（用于截图宣传与 UI 调试）</summary>
+    public static bool DemoMode { get; set; }
+
     /// <summary>
     /// 执行一次配额查询（并行请求 quota/limit 和 model-usage）
     /// </summary>
     private async Task FetchQuota(string token, string baseUrl, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(token))
-        {
-            var offline = new QuotaSnapshot
-            {
-                IsOffline = true,
-                McpQuota = _lastSnapshot.McpQuota,
-                Token5hQuota = _lastSnapshot.Token5hQuota,
-                CallCount = _lastSnapshot.CallCount,
-                TokenUsage = _lastSnapshot.TokenUsage
-            };
-            _lastSnapshot = offline;
-            QuotaUpdated?.Invoke(offline);
-            Error?.Invoke("Token 未配置");
-            return;
-        }
-
+        // 手动刷新与轮询周期可能重叠，串行化以保护 _lastSnapshot
+        await _fetchGate.WaitAsync(ct);
         try
         {
+            if (DemoMode)
+            {
+                var demo = MakeDemoSnapshot();
+                _lastSnapshot = demo;
+                _consecutiveFailures = 0;
+                QuotaUpdated?.Invoke(demo);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(token))
+            {
+                var offline = new QuotaSnapshot
+                {
+                    IsOffline = true,
+                    McpQuota = _lastSnapshot.McpQuota,
+                    Token5hQuota = _lastSnapshot.Token5hQuota,
+                    CallCount = _lastSnapshot.CallCount,
+                    TokenUsage = _lastSnapshot.TokenUsage
+                };
+                _lastSnapshot = offline;
+                QuotaUpdated?.Invoke(offline);
+                Error?.Invoke("Token 未配置");
+                return;
+            }
+
             string domain = NormalizeBaseUrl(baseUrl);
 
             // 并行请求两个接口
@@ -161,7 +179,6 @@ public class QuotaService : IDisposable
 
             _lastSnapshot = snapshot;
             _consecutiveFailures = 0;
-            _enteredBackoff = false;
 
             QuotaUpdated?.Invoke(snapshot);
         }
@@ -172,7 +189,6 @@ public class QuotaService : IDisposable
         catch (Exception ex)
         {
             _consecutiveFailures++;
-
 
             var offline = new QuotaSnapshot
             {
@@ -186,7 +202,14 @@ public class QuotaService : IDisposable
 
             Error?.Invoke($"请求失败 ({_consecutiveFailures}/{MaxRetryCount}): {ex.Message}");
 
+            if (_consecutiveFailures >= MaxRetryCount)
+                Error?.Invoke("连续失败次数过多，已停止自动轮询，请手动刷新");
+
             QuotaUpdated?.Invoke(offline);
+        }
+        finally
+        {
+            _fetchGate.Release();
         }
     }
 
@@ -238,7 +261,8 @@ public class QuotaService : IDisposable
             System.Diagnostics.Debug.WriteLine($"[QuotaService] limit item: {item}");
 
             string type = item.TryGetProperty("type", out var t) ? t.GetString() ?? "" : "";
-            long total = GetLongAny(item, "usage", "limit_value", "limitValue");
+            // 总量优先读 limit* 字段；"usage" 仅作兼容兜底（若 API 语义变化会被 percentage 兜住）
+            long total = GetLongAny(item, "limit_value", "limitValue", "usage");
             long used = GetLongAny(item, "currentValue", "used_value", "usedValue");
             long remaining = GetLongAny(item, "remaining", "remaining_value", "remainingValue");
 
@@ -346,9 +370,40 @@ public class QuotaService : IDisposable
         return url;
     }
 
+    /// <summary>
+    /// 演示快照：MCP 7.6%（展示一位小数与最小填充），5h Token 61.8%（展示警告色），3h47m 后重置
+    /// </summary>
+    private static QuotaSnapshot MakeDemoSnapshot()
+    {
+        return new QuotaSnapshot
+        {
+            IsOffline = false,
+            Timestamp = DateTime.Now,
+            McpQuota = new QuotaItem
+            {
+                Name = "MCP 配额", Type = "TIME_LIMIT",
+                Total = 1000, Used = 76, Remaining = 924,
+                DirectPercentage = 7.6,
+                NextResetTime = DateTimeOffset.Now.AddMonths(1).ToUnixTimeMilliseconds()
+            },
+            Token5hQuota = new QuotaItem
+            {
+                Name = "5h Token", Type = "TOKENS_LIMIT",
+                Total = 120_000_000, Used = 74_160_000, Remaining = 45_840_000,
+                DirectPercentage = 61.8,
+                NextResetTime = DateTimeOffset.Now.AddHours(3).AddMinutes(47).ToUnixTimeMilliseconds()
+            },
+            CallCount = 1342,
+            TokenUsage = 181_000_000
+        };
+    }
+
     public void Dispose()
     {
-        _pollCts.Dispose();
+        // 注意：不 Dispose _fetchGate——手动刷新持 CancellationToken.None，
+        // 若刷新仍在途，释放 gate 会让 WaitAsync/Release 抛 ODE（async void 刷新会直接崩进程）。
+        // 进程生命周期对象，随进程回收即可。
+        StopPolling();
         _http.Dispose();
     }
 }

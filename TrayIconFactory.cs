@@ -10,44 +10,50 @@ namespace GLMQuotaMonitor;
 /// </summary>
 public static class TrayIconFactory
 {
-    private static readonly Dictionary<QuotaStatus, Icon> IconCache = new();
+    private static readonly Dictionary<(QuotaStatus, int), Icon> IconCache = new();
 
     /// <summary>
-    /// 根据配额状态获取对应的图标
+    /// 根据配额状态获取对应的图标（缓存键含像素尺寸：运行期 DPI 变化后自动重建）
     /// </summary>
     public static Icon GetIcon(QuotaStatus status)
     {
-        if (!IconCache.TryGetValue(status, out var icon))
+        int px = Math.Max(16, SystemInformation.SmallIconSize.Width);
+        var key = (status, px);
+        if (!IconCache.TryGetValue(key, out var icon))
         {
-            icon = CreateStatusIcon(status);
-            IconCache[status] = icon;
+            icon = CreateStatusIcon(status, px);
+            IconCache[key] = icon;
         }
         return icon;
     }
 
     /// <summary>
-    /// 生成状态图标（16x16 彩色圆点）
+    /// 生成状态图标（圆点；尺寸取系统小图标规格，几何按比例缩放）
+    /// 配色与卡片同源（Catppuccin 中间调），不再使用刺眼的系统纯色
     /// </summary>
-    private static Icon CreateStatusIcon(QuotaStatus status)
+    private static Icon CreateStatusIcon(QuotaStatus status, int px)
     {
         Color color = status switch
         {
-            QuotaStatus.Normal => Color.FromArgb(0, 180, 0),     // 绿色
-            QuotaStatus.Warning => Color.FromArgb(230, 180, 0),  // 黄色
-            QuotaStatus.Critical => Color.FromArgb(200, 0, 0),   // 红色
-            _ => Color.FromArgb(128, 128, 128)                   // 灰色
+            QuotaStatus.Normal => BlendBlack(Color.FromArgb(124, 196, 133), 0.30f),   // 绿
+            QuotaStatus.Warning => BlendBlack(Color.FromArgb(233, 186, 100), 0.30f),  // 黄
+            QuotaStatus.Critical => BlendBlack(Color.FromArgb(226, 98, 98), 0.30f),   // 红
+            _ => BlendBlack(Color.FromArgb(140, 145, 165), 0.30f)                     // 灰
         };
 
-        using var bmp = new Bitmap(16, 16);
+        using var bmp = new Bitmap(px, px);
         using var g = Graphics.FromImage(bmp);
         g.SmoothingMode = SmoothingMode.AntiAlias;
         g.Clear(Color.Transparent);
 
-        // 填充圆
+        float f = px / 16f;
+        float inset = 1.2f * f;
+        float d = px - inset * 2;
+
         using var fill = new SolidBrush(color);
-        using var border = new Pen(ControlPaint.Dark(color), 1);
-        g.FillEllipse(fill, 1, 1, 14, 14);
-        g.DrawEllipse(border, 1, 1, 14, 14);
+        using var border = new Pen(BlendBlack(color, 0.35f), Math.Max(1f, 1.1f * f));
+        g.FillEllipse(fill, inset, inset, d, d);
+        g.DrawEllipse(border, inset, inset, d, d);
 
         IntPtr hIcon = bmp.GetHicon();
         var result = Icon.FromHandle(hIcon);
@@ -56,6 +62,13 @@ public static class TrayIconFactory
         var cloned = (Icon)result.Clone();
         DestroyIcon(hIcon);
         return cloned;
+    }
+
+    /// <summary>向黑色方向混合（替代 ControlPaint.Dark 的死黑描边）</summary>
+    private static Color BlendBlack(Color c, float amount)
+    {
+        byte Mix(byte ch) => (byte)(ch * (1 - amount));
+        return Color.FromArgb(Mix(c.R), Mix(c.G), Mix(c.B));
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]

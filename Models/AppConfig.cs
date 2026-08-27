@@ -54,6 +54,14 @@ public class AppConfig
     public int? FloatingBarY { get; set; }
 
     /// <summary>
+    /// 贴边状态持久化：直接存 DockStyle 枚举值——0=未贴边，1=顶，3=左，4=右（2=底，暂未支持贴底）
+    /// </summary>
+    public int SnapEdgeValue { get; set; }
+
+    /// <summary>贴边时沿边缘的位置坐标（垂直边存 Y，水平边存 X；null = 未记录）</summary>
+    public int? SnapPosition { get; set; }
+
+    /// <summary>
     /// 获取实际使用的平台域名
     /// </summary>
     public string GetBaseUrl()

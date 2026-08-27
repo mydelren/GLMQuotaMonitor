@@ -15,17 +15,21 @@ public class TrayApplicationContext : ApplicationContext
     private readonly ConfigService _configService;
     private readonly QuotaService _quotaService;
     private readonly ThemeService _themeService;
-    private readonly SynchronizationContext? _syncContext;
+    /// <summary>UI 线程同步上下文；构造时经 _uiMarshaller 触发安装，永不为主线程外的 null</summary>
+    private readonly SynchronizationContext _syncContext;
 
     private FloatingWidget? _floatingBar;
-    private long _lastNotifiedResetTime = long.MinValue;
-    private DateTime _lastNotifiedTime = DateTime.MinValue;
+    /// <summary>临界弹窗去抖：只在跨入临界状态时提示一次，回落后再重新武装</summary>
+    private bool _criticalNotified;
+    /// <summary>用于后台线程事件投递的隐藏控件；构造它也让 WinForms 安装好同步上下文</summary>
+    private readonly Control _uiMarshaller;
 
     public TrayApplicationContext()
     {
-        // 显式创建 WinForms 同步上下文。
-        // 构造函数在 Application.Run 内部调用，此时 SynchronizationContext.Current 可能尚未安装。
-        _syncContext = new WindowsFormsSynchronizationContext();
+        // 构造控件前 Current 为 null（Application.Run 尚未开始）：
+        // 先创建一个 Control 触发 WinFormsSynchronizationContext 安装，再捕获供事件线程投递使用
+        _uiMarshaller = new Control();
+        _syncContext = SynchronizationContext.Current ?? new WindowsFormsSynchronizationContext();
         _configService = new ConfigService();
         _quotaService = new QuotaService();
         _themeService = new ThemeService();
@@ -56,14 +60,15 @@ public class TrayApplicationContext : ApplicationContext
             ShowFloatingBar();
 
         // 如果没有 Token，弹设置窗口
+        // （ShowDialog 自带消息循环，无需等待 Application.Run；异常至少留下日志，不能静默）
         if (!_configService.HasToken())
         {
-            // 延迟一下再弹，等 UI 就绪
-            Task.Delay(500).ContinueWith(_ =>
+            try { ShowSettings(); }
+            catch (Exception ex)
             {
-                try { ShowSettings(); }
-                catch { }
-            }, TaskScheduler.FromCurrentSynchronizationContext());
+                System.Diagnostics.Debug.WriteLine($"[Settings] auto-open failed: {ex}");
+                DebugLog($"auto-open settings failed: {ex.GetType().Name}: {ex.Message}");
+            }
         }
 
         // 订阅主题变更（更新菜单渲染器）
@@ -116,11 +121,10 @@ public class TrayApplicationContext : ApplicationContext
     /// </summary>
     private void OnQuotaUpdated(QuotaSnapshot snapshot)
     {
-        if (SynchronizationContext.Current == null)
+        if (SynchronizationContext.Current != _syncContext)
         {
-            var syncCtx = _syncContext;
-            if (syncCtx != null)
-                syncCtx.Post(_ => OnQuotaUpdated(snapshot), null);
+            // 后台网络线程：统一投递到 UI 上下文，绝不能因为拿不到上下文而静默丢数据
+            _syncContext.Post(_ => OnQuotaUpdated(snapshot), null);
             return;
         }
         if (!_notifyIcon.Visible) return;
@@ -131,9 +135,10 @@ public class TrayApplicationContext : ApplicationContext
         // 更新托盘图标
         _notifyIcon.Icon = TrayIconFactory.GetIcon(status);
 
-        // 更新 tooltip
-        string mcpPct = $"{snapshot.McpQuota.Percentage:F0}%";
-        string tokenPct = $"{snapshot.Token5hQuota.Percentage:F0}%";
+        // 更新 tooltip（与卡片一致：<10% 显示一位小数）
+        static string Pct(double v) => v > 0 && v < 10 ? $"{v:F1}%" : $"{v:F0}%";
+        string mcpPct = Pct(snapshot.McpQuota.Percentage);
+        string tokenPct = Pct(snapshot.Token5hQuota.Percentage);
         string calls = FormatNumber(snapshot.CallCount);
         string resetInfo = "";
         if (snapshot.Token5hQuota.ResetDateTime.HasValue)
@@ -142,26 +147,21 @@ public class TrayApplicationContext : ApplicationContext
         if (tooltip.Length > 127) tooltip = tooltip[..127];
         _notifyIcon.Text = tooltip;
 
-        // 如果超限，弹通知
+        // 跨入临界状态时弹一次通知；离线期间保持武装不解除，避免 Critical↔Offline 抖动退化为逐周期弹窗
         if (status == QuotaStatus.Critical && !snapshot.IsOffline)
         {
-            long resetTime = snapshot.Token5hQuota.NextResetTime;
-            bool shouldNotify;
-
-            if (resetTime > 0)
-                shouldNotify = resetTime != _lastNotifiedResetTime;
-            else
-                shouldNotify = (DateTime.Now - _lastNotifiedTime).TotalHours >= 1;
-
-            if (shouldNotify)
+            if (!_criticalNotified)
             {
-                _lastNotifiedResetTime = resetTime;
-                _lastNotifiedTime = DateTime.Now;
+                _criticalNotified = true;
                 _notifyIcon.ShowBalloonTip(5000,
                     "GLM 配额预警",
                     $"MCP 配额: {mcpPct}\n5h Token: {tokenPct}",
                     ToolTipIcon.Warning);
             }
+        }
+        else if (!snapshot.IsOffline)
+        {
+            _criticalNotified = false;
         }
 
         // 更新浮动条
@@ -248,19 +248,31 @@ public class TrayApplicationContext : ApplicationContext
         _floatingBar = null;
     }
 
-    /// <summary>
-    /// 显示设置窗口
-    /// </summary>
+    /// <summary>显示设置窗口</summary>
     private void ShowSettings()
     {
+        DebugLog("ShowSettings enter");
         using var form = new SettingsForm(_configService, _themeService);
         form.ShowDialog();
+        DebugLog("ShowSettings closed");
     }
 
+    /// <summary>调试日志（设 GLMQM_DEBUG=1 环境变量启用）；统一走 ConfigService 的实现</summary>
+    private static void DebugLog(string message) => ConfigService.SafeDebugLog(message);
+
+    /// <summary>
+    /// 循环切换主题：Auto → Dark → Light → Auto
+    /// </summary>
     private void CycleTheme()
     {
         var config = _configService.Config;
-        config.Theme = _themeService.IsDark ? ThemeMode.Light : ThemeMode.Dark;
+        config.Theme = config.Theme switch
+        {
+            ThemeMode.Auto => ThemeMode.Dark,
+            ThemeMode.Dark => ThemeMode.Light,
+            ThemeMode.Light => ThemeMode.Auto,
+            _ => ThemeMode.Auto
+        };
         _configService.Save(config);
     }
 
@@ -295,6 +307,7 @@ public class TrayApplicationContext : ApplicationContext
             _quotaService.Dispose();
             _themeService.Dispose();
             _floatingBar?.Dispose();
+            _uiMarshaller.Dispose();
             TrayIconFactory.ClearCache();
         }
         base.Dispose(disposing);

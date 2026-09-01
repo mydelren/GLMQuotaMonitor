@@ -44,6 +44,7 @@ public class FloatingWidget : Form
     // ═══ 其他 ═══
     private const int EdgeSnapThreshold = 10;
     private const int AutoHideDelayMs = 500;
+    private const int TipShowDurationMs = 3000; // 收回迷你条时强制弹出的数字气泡自动消失时长
 
     private readonly ThemeService _themeService;
     private readonly ConfigService _configService;
@@ -246,7 +247,7 @@ public class FloatingWidget : Form
     {
         // Catppuccin 颜色（页脚一档提到 subtext 级别，7.5pt 时代的低对比问题一并解决）
         Color bg = isDark ? Color.FromArgb(30, 30, 46) : Color.FromArgb(239, 241, 245);
-        Color borderColor = isDark ? Color.FromArgb(49, 50, 68) : Color.FromArgb(204, 208, 218);
+        Color borderColor = isDark ? Color.FromArgb(49, 50, 68) : Color.FromArgb(198, 205, 220);
         Color statColor = isDark ? Color.FromArgb(127, 132, 156) : Color.FromArgb(108, 111, 133);
         Color footerColor = isDark ? Color.FromArgb(110, 115, 141) : Color.FromArgb(122, 125, 148);
 
@@ -255,9 +256,9 @@ public class FloatingWidget : Form
         using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w, h, CardRadius))
             g.FillPath(bgBrush, path);
 
-        // 边框
+        // 1px 内描边：路径半宽内切 0.5px，完整落在 Region 裁剪区内，不产生半像素切边
         using (var borderPen = new Pen(borderColor))
-        using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w - 1, h - 1, CardRadius))
+        using (var path = GraphicsExtensions.MakeRoundRect(0.5f, 0.5f, w - 1f, h - 1f, CardRadius))
             g.DrawPath(borderPen, path);
 
         int x = CardHPadding;
@@ -643,7 +644,9 @@ public class FloatingWidget : Form
     {
         if (!_isSnapped) return;
         _isExpanded = true;
-        HideTip();
+        // 只隐藏气泡窗口、不清 tip 文本：Win32 tooltip 重挂文本后需要新的鼠标移动才会自动弹出，
+        // 清空再重挂会让收回后的气泡永远出不来
+        _tip.Hide(this);
 
         Size = new Size(CardWidth, CardHeight);
         var screen = Screen.FromPoint(new Point(Location.X + Width / 2, Location.Y)).WorkingArea;
@@ -673,6 +676,18 @@ public class FloatingWidget : Form
             : Color.FromArgb(230, 233, 239);
 
         Invalidate();
+
+        if (ClientRectangle.Contains(PointToClient(Cursor.Position)))
+        {
+            // hover 优先：收回瞬间鼠标仍在条上时立即再展开，消除"条在但交互死区"
+            Expand();
+        }
+        else
+        {
+            // 鼠标在条外收回：强制弹出数字气泡（重挂的 tooltip 文本等不到鼠标移动，不会自动弹出）
+            var p = PointToClient(Cursor.Position);
+            _tip.Show(BuildTooltip(), this, p.X, p.Y - 20, TipShowDurationMs);
+        }
     }
 
     #endregion

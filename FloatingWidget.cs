@@ -105,7 +105,8 @@ public class FloatingWidget : Form
         ClampIntoNearestScreen();
 
         // 恢复上次的贴边状态
-        if (config.SnapEdgeValue is >= 1 and <= 3)
+        // DockStyle 枚举值：1=Top，3=Left，4=Right（注意不是 1/2/3 顺序！）
+        if (config.SnapEdgeValue is 1 or 3 or 4)
             RestoreSnappedState(config);
 
         // 右键菜单
@@ -206,6 +207,7 @@ public class FloatingWidget : Form
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
+        ConfigService.SafeDebugLog($"[resize] Size={Width}x{Height} loc={Location} snapped={_isSnapped} handle={IsHandleCreated}");
         ApplyShapeRegion();
     }
 
@@ -369,6 +371,7 @@ public class FloatingWidget : Form
     /// </summary>
     private void PaintEdgeStrip(Graphics g, bool isDark, int w, int h)
     {
+        ConfigService.SafeDebugLog($"[strip] isDark={isDark} mcp={_snapshot.McpQuota.Percentage:F1} tok={_snapshot.Token5hQuota.Percentage:F1} snap={_snapEdge} exp={_isExpanded} off={_snapshot.IsOffline} rect={Location},{Size}");
         Color bg = isDark ? Color.FromArgb(24, 24, 37) : Color.FromArgb(230, 233, 239);
         Color segBg = isDark ? Color.FromArgb(49, 50, 68) : Color.FromArgb(204, 208, 218);
 
@@ -616,6 +619,7 @@ public class FloatingWidget : Form
         _isSnapped = true;
         Location = loc;
         Size = size;
+        ConfigService.SafeDebugLog($"[restore] edge={_snapEdge} local={loc},{size} prop={Location},{Size} area={area} areaRight={area.Right}");
         BackColor = _themeService.IsDark ? Color.FromArgb(24, 24, 37) : Color.FromArgb(230, 233, 239);
     }
 

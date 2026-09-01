@@ -32,12 +32,14 @@ public class FloatingWidget : Form
     private const int EdgeBarWidth = 10;        // 进度条宽度
     private const int EdgeMarginDesktop = 3;    // 桌面侧留白
     private const int EdgeMarginScreen = 5;     // 屏幕边留白
+    private const int EdgeSegGap = 4;           // 并排/堆叠的条间距
+    // 迷你条厚度：桌面侧留白 + 两根并排进度条 + 间距 + 屏幕边留白（= 32）
+    private const int EdgeStripWidth = EdgeMarginDesktop + EdgeBarWidth * 2 + EdgeSegGap + EdgeMarginScreen;
     private const int EdgeStripVHeight = 80;    // 竖条高度
     private const int EdgeStripHWidth = 126;    // 横条宽度
-    private const int EdgeSegGap = 3;           // 两段间距
-    private const int EdgeSegPadding = 5;       // 段内 padding
+    private const int EdgeSegPadding = 5;       // 条两端 padding（竖条上下 / 横条左右）
     private const int EdgeSegInset = 1;         // 色块内缩
-    private const int EdgeRadius = 3;           // 圆角
+    private const int EdgeRadius = 6;           // 条卡圆角（须 ≥ EdgeSegInset + 1，1px 内描边才不会被 Region 切掉）
 
     // ═══ 其他 ═══
     private const int EdgeSnapThreshold = 10;
@@ -207,7 +209,6 @@ public class FloatingWidget : Form
     protected override void OnResize(EventArgs e)
     {
         base.OnResize(e);
-        ConfigService.SafeDebugLog($"[resize] Size={Width}x{Height} loc={Location} snapped={_isSnapped} handle={IsHandleCreated}");
         ApplyShapeRegion();
     }
 
@@ -371,13 +372,18 @@ public class FloatingWidget : Form
     /// </summary>
     private void PaintEdgeStrip(Graphics g, bool isDark, int w, int h)
     {
-        ConfigService.SafeDebugLog($"[strip] isDark={isDark} mcp={_snapshot.McpQuota.Percentage:F1} tok={_snapshot.Token5hQuota.Percentage:F1} snap={_snapEdge} exp={_isExpanded} off={_snapshot.IsOffline} rect={Location},{Size}");
         Color bg = isDark ? Color.FromArgb(24, 24, 37) : Color.FromArgb(230, 233, 239);
         Color segBg = isDark ? Color.FromArgb(49, 50, 68) : Color.FromArgb(204, 208, 218);
+        Color borderColor = isDark ? Color.FromArgb(49, 50, 68) : Color.FromArgb(198, 205, 220);
 
         using (var bgBrush = new SolidBrush(bg))
         using (var path = GraphicsExtensions.MakeRoundRect(0, 0, w, h, EdgeRadius))
             g.FillPath(bgBrush, path);
+
+        // 1px 内描边：路径半宽内切 0.5px，保证描边完整落在 Region 裁剪区内
+        using (var borderPen = new Pen(borderColor))
+        using (var borderPath = GraphicsExtensions.MakeRoundRect(0.5f, 0.5f, w - 1f, h - 1f, EdgeRadius))
+            g.DrawPath(borderPen, borderPath);
 
         if (_snapEdge == DockStyle.Top)
             PaintEdgeStripHorizontal(g, isDark, segBg, w, h);
@@ -387,32 +393,34 @@ public class FloatingWidget : Form
 
     private void PaintEdgeStripVertical(Graphics g, bool isDark, Color segBg, int w, int h)
     {
-        // 留白：桌面侧 3px + 进度条 10px + 屏幕边 5px = 18px
-        int barX = _snapEdge == DockStyle.Right ? EdgeMarginDesktop : EdgeMarginScreen;
-        int barW = EdgeBarWidth;
+        // 两根 10px 竖条并排（间距 EdgeSegGap），条长为内容高（上下 EdgeSegPadding），填充自底向上生长
+        // 条序与展开卡片一致（MCP 在前）：左右缘 MCP 都在左列，屏幕边留白(5px)分别在右缘的右侧 / 左缘的左侧
         int barY = EdgeSegPadding;
         int barH = h - EdgeSegPadding * 2;
-        int segH = (barH - EdgeSegGap) / 2;
+
+        int mcpX = _snapEdge == DockStyle.Right ? EdgeMarginDesktop : EdgeMarginScreen;
+        int tokX = mcpX + EdgeBarWidth + EdgeSegGap;
 
         DrawEdgeSegment(g, segBg, isDark, _snapshot.McpQuota, _configService.Config,
-            barX, barY, barW, segH, vertical: true);
+            mcpX, barY, EdgeBarWidth, barH, vertical: true);
         DrawEdgeSegment(g, segBg, isDark, _snapshot.Token5hQuota, _configService.Config,
-            barX, barY + segH + EdgeSegGap, barW, segH, vertical: true);
+            tokX, barY, EdgeBarWidth, barH, vertical: true);
     }
 
     private void PaintEdgeStripHorizontal(Graphics g, bool isDark, Color segBg, int w, int h)
     {
-        // 留白：屏幕边(上) 5px + 进度条区域 + 桌面侧(下) 3px = 18px
+        // 两根 10px 横条上下堆叠（间距 EdgeSegGap），条长为内容宽（左右 EdgeSegPadding），填充自左向右生长
+        // 行序与展开卡片一致：MCP 在上（靠屏幕边），5h 在下（靠桌面侧）
         int barX = EdgeSegPadding;
         int barW = w - EdgeSegPadding * 2;
-        int barY = EdgeMarginScreen; // 跳过顶部屏幕边留白
-        int barH = EdgeBarWidth;
-        int segW = (barW - EdgeSegGap) / 2;
+
+        int mcpY = EdgeMarginScreen;                        // MCP 靠屏幕边（上）
+        int tokY = EdgeMarginScreen + EdgeBarWidth + EdgeSegGap; // 5h 靠桌面侧（下）
 
         DrawEdgeSegment(g, segBg, isDark, _snapshot.McpQuota, _configService.Config,
-            barX, barY, segW, barH, vertical: false);
+            barX, mcpY, barW, EdgeBarWidth, vertical: false);
         DrawEdgeSegment(g, segBg, isDark, _snapshot.Token5hQuota, _configService.Config,
-            barX + segW + EdgeSegGap, barY, segW, barH, vertical: false);
+            barX, tokY, barW, EdgeBarWidth, vertical: false);
     }
 
     private void DrawEdgeSegment(Graphics g, Color segBg, bool isDark,
@@ -420,8 +428,14 @@ public class FloatingWidget : Form
     {
         double pct = Math.Clamp(item.Percentage, 0, 100);
 
+        // 轨道画成胶囊形（圆角 = 短边一半），与展开卡片的药丸进度条同一形态语言
+        float radius = Math.Min(w, h) / 2f;
+        using var trackPath = GraphicsExtensions.MakeRoundRect(x, y, w, h, radius);
         using (var bgBrush = new SolidBrush(segBg))
-            g.FillRectangle(bgBrush, x, y, w, h);
+            g.FillPath(bgBrush, trackPath);
+
+        // <2% 不画色块：极小填充会缩成空胶囊里的一个圆点，宁可整条留空
+        if (pct < 2) return;
 
         // 色块颜色（边缘条用柔和色调）
         Color fillColor;
@@ -435,6 +449,8 @@ public class FloatingWidget : Form
             fillColor = isDark ? Color.FromArgb(148, 226, 213) : Color.FromArgb(95, 168, 160);
 
         using var fillBrush = new SolidBrush(fillColor);
+        // 色块裁剪进轨道胶囊：填充端自动跟随胶囊曲线，任何比例都不越出轨道
+        g.SetClip(trackPath);
         if (vertical)
         {
             int fillH = (int)((h - EdgeSegInset * 2) * pct / 100);
@@ -451,6 +467,7 @@ public class FloatingWidget : Form
                     x + EdgeSegInset, y + EdgeSegInset,
                     fillW, h - EdgeSegInset * 2);
         }
+        g.ResetClip();
     }
 
     #endregion
@@ -569,15 +586,15 @@ public class FloatingWidget : Form
         return edge switch
         {
             DockStyle.Right => (
-                new Point(screen.Right - (EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen), Math.Clamp(Location.Y, screen.Top, screen.Bottom - EdgeStripVHeight)),
-                new Size(EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen, EdgeStripVHeight)),
+                new Point(screen.Right - EdgeStripWidth, Math.Clamp(Location.Y, screen.Top, screen.Bottom - EdgeStripVHeight)),
+                new Size(EdgeStripWidth, EdgeStripVHeight)),
             DockStyle.Left => (
                 new Point(screen.Left, Math.Clamp(Location.Y, screen.Top, screen.Bottom - EdgeStripVHeight)),
-                new Size(EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen, EdgeStripVHeight)),
+                new Size(EdgeStripWidth, EdgeStripVHeight)),
             _ => // Top
                 (
                 new Point(Math.Clamp(Location.X, screen.Left, screen.Right - EdgeStripHWidth), screen.Top),
-                new Size(EdgeStripHWidth, EdgeMarginDesktop + EdgeBarWidth + EdgeMarginScreen))
+                new Size(EdgeStripHWidth, EdgeStripWidth))
         };
     }
 
@@ -619,7 +636,6 @@ public class FloatingWidget : Form
         _isSnapped = true;
         Location = loc;
         Size = size;
-        ConfigService.SafeDebugLog($"[restore] edge={_snapEdge} local={loc},{size} prop={Location},{Size} area={area} areaRight={area.Right}");
         BackColor = _themeService.IsDark ? Color.FromArgb(24, 24, 37) : Color.FromArgb(230, 233, 239);
     }
 

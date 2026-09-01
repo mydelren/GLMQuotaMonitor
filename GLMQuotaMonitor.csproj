@@ -9,7 +9,7 @@
     <!-- <ApplicationIcon>app.ico</ApplicationIcon> -->
     <AssemblyName>GLMQuotaMonitor</AssemblyName>
     <RootNamespace>GLMQuotaMonitor</RootNamespace>
-    <Version>0.3.0</Version>
+    <Version>0.4.0</Version>
     <Authors>mydelren</Authors>
     <Description>Windows 桌面工具，实时监控智谱 AI / Z.ai API 使用配额</Description>
   </PropertyGroup>

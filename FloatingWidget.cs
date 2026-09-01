@@ -213,6 +213,31 @@ public class FloatingWidget : Form
         ApplyShapeRegion();
     }
 
+    private const int WM_GETMINMAXINFO = 0x0024;
+
+    [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+    private struct MINMAXINFO
+    {
+        public Point ptReserved, ptMaxSize, ptMaxPosition, ptMinTrackSize, ptMaxTrackSize;
+    }
+
+    /// <summary>
+    /// 解除系统最小窗口尺寸限制（WM_GETMINMAXINFO / SM_CXMINTRACK）：
+    /// 迷你条只有 32px 宽，部分机器（如启用辅助功能字体或高缩放的 125% 桌面）MinWindowTrackSize
+    /// 可达 178px，会把无边框小窗强制撑宽成"左半截是条、右边一大块空底色"的畸形
+    /// </summary>
+    protected override void WndProc(ref Message m)
+    {
+        if (m.Msg == WM_GETMINMAXINFO)
+        {
+            var mmi = System.Runtime.InteropServices.Marshal.PtrToStructure<MINMAXINFO>(m.LParam);
+            mmi.ptMinTrackSize = new Point(1, 1);
+            System.Runtime.InteropServices.Marshal.StructureToPtr(mmi, m.LParam, true);
+            return;
+        }
+        base.WndProc(ref m);
+    }
+
     /// <summary>
     /// 把窗口 Region 裁成当前状态的圆角形状：
     /// 只靠 Paint 画圆角时，四个角落会露出矩形窗体的本底色块（毛刺），

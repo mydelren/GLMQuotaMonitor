@@ -49,8 +49,8 @@ devlog.md
 docs/
 *.html
 
-## 小红书图文模板（*.html 全局忽略的例外）
-!assets/xiaohongshu/*.html
-
-## 成图体积大，暂缓入库（HTML 源已入库可随时重渲）
-assets/xiaohongshu/*.png
+## 内部工作文档与素材（不入库）
+PLAN.md
+EXECUTION_PLAN.md
+.constraints
+assets/
